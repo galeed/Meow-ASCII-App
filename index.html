@@ -120,6 +120,51 @@ window.onerror = function(msg, url, line, col, err) {
 (function() {
 'use strict';
 
+(function() {
+'use strict';
+
+// ===== BLOQUEO DE ZOOM Y REBOTES EN iOS (NUEVO) =====
+
+// 1. Bloquear pinch-to-zoom (Safari iOS ignora user-scalable=no)
+document.addEventListener('gesturestart', function(e) {
+  e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('gesturechange', function(e) {
+  e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('gestureend', function(e) {
+  e.preventDefault();
+}, { passive: false });
+
+// 2. Bloquear zoom por doble toque
+var lastTouchEnd = 0;
+document.addEventListener('touchend', function(e) {
+  var now = Date.now();
+  if (now - lastTouchEnd <= 300) {
+    e.preventDefault();
+  }
+  lastTouchEnd = now;
+}, { passive: false });
+
+// 3. Bloquear zoom con Ctrl + rueda (desktop)
+document.addEventListener('wheel', function(e) {
+  if (e.ctrlKey) e.preventDefault();
+}, { passive: false });
+
+// 4. Bloquear el "rebote" elástico del body
+document.body.addEventListener('touchmove', function(e) {
+  // Solo bloquea si no es dentro de un contenedor scrolleable
+  if (!e.target.closest('#terminal') && !e.target.closest('#preview-box')) {
+    e.preventDefault();
+  }
+}, { passive: false });
+
+// ===== FIN BLOQUEO =====
+
+// ... resto del código (ASCII_ARTS, etc.) ...
+
 // ============================================================
 // ASCII ARTS
 // ============================================================
