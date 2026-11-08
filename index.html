@@ -5,92 +5,64 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Meow FWT App</title>
+<title>fastfetch-web-terminal</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   * {
     box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent; /* NUEVO: quita el flash azul al tocar */
-    -webkit-touch-callout: none;              /* NUEVO: quita el menú al mantener presionado */
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
   }
-
   html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    width: 100%;
-    background: #0d1117;
-    color: #c9d1d9;
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    background: #0d1117; color: #c9d1d9;
     font-family: 'Menlo', 'Courier New', monospace;
     font-size: 13px;
-    -webkit-text-size-adjust: 100%;           /* NUEVO: evita que iOS agrande el texto al rotar */
-    overscroll-behavior: none;                 /* NUEVO: bloquea el "pull to refresh" y rebotes */
-    touch-action: manipulation;                /* NUEVO: desactiva zoom por doble toque */
-    user-select: none;                         /* NUEVO: sin selección accidental */
+    -webkit-text-size-adjust: 100%;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+    user-select: none;
     -webkit-user-select: none;
   }
-
   #terminal {
-    padding: 12px;
+    padding: calc(12px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)) 12px;
     height: 100vh;
-    height: 100dvh;                            /* NUEVO: altura dinámica en iOS (respeta barra Safari) */
+    height: 100dvh;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;              /* NUEVO: no propaga el scroll al body */
-    touch-action: pan-y;                       /* NUEVO: solo permite scroll vertical */
+    overscroll-behavior: contain;
+    touch-action: pan-y;
   }
-
   #output {
-    white-space: pre-wrap;
-    word-break: break-word;
-    flex: 1;
-    user-select: text;                         /* NUEVO: deja seleccionar texto de la consola */
-    -webkit-user-select: text;
+    white-space: pre-wrap; word-break: break-word; flex: 1;
+    user-select: text; -webkit-user-select: text;
   }
-
   .line { white-space: pre-wrap; }
-  .error   { color: #f85149; }
+  .error { color: #f85149; }
   .success { color: #3fb950; }
-  .dim     { color: #8b949e; }
-  .warn    { color: #d29922; }
-  .progress{ color: #58a6ff; }
-
+  .dim { color: #8b949e; }
+  .warn { color: #d29922; }
+  .progress { color: #58a6ff; }
   .input-line { display: flex; align-items: center; }
-
-  .input-line span { color: #58a6ff; margin-right: 6px; }
-
+  .input-line span { color: #58a6ff; margin-right: 6px; flex-shrink: 0; }
   #cmdInput {
-    background: transparent;
-    border: none;
-    outline: none;
-    color: #c9d1d9;
-    font-family: inherit;
-    font-size: 16px;                           /* NUEVO: 16px evita zoom automático de iOS al enfocar */
-    flex: 1;
-    caret-color: #58a6ff;
-    min-width: 0;
-    user-select: text;
-    -webkit-user-select: text;
+    background: transparent; border: none; outline: none;
+    color: #c9d1d9; font-family: inherit;
+    font-size: 16px; transform: scale(0.8125); transform-origin: left center;
+    flex: 1; caret-color: #58a6ff; min-width: 0;
+    user-select: text; -webkit-user-select: text;
   }
-
   #preview-box {
-    display: none;
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 6px;
-    padding: 14px;
-    margin: 8px 0;
-    font-size: 11px;
-    line-height: 1.15;
-    overflow-x: auto;
+    display: none; background: #161b22; border: 1px solid #30363d;
+    border-radius: 6px; padding: 14px; margin: 8px 0;
+    font-size: 11px; line-height: 1.15; overflow-x: auto;
     overscroll-behavior: contain;
   }
-
   .ff-line { display: flex; }
-  .ff-art  { white-space: pre; flex-shrink: 0; }
+  .ff-art { white-space: pre; flex-shrink: 0; }
   .ff-info { white-space: pre; }
 </style>
 </head>
@@ -105,7 +77,6 @@
 </div>
 
 <script>
-// ===== WRAPPER GLOBAL PARA CAPTURAR ERRORES =====
 window.onerror = function(msg, url, line, col, err) {
   var out = document.getElementById('output');
   if (out) {
@@ -120,64 +91,22 @@ window.onerror = function(msg, url, line, col, err) {
 (function() {
 'use strict';
 
+// ===== BLOQUEO DE ZOOM Y REBOTES =====
+document.addEventListener('gesturestart', function(e) { e.preventDefault(); }, { passive: false });
+document.addEventListener('gesturechange', function(e) { e.preventDefault(); }, { passive: false });
+document.addEventListener('gestureend', function(e) { e.preventDefault(); }, { passive: false });
 
-// ===== BLOQUEO DE ZOOM Y REBOTES EN iOS (NUEVO) =====
-
-// 1. Bloquear pinch-to-zoom (Safari iOS ignora user-scalable=no)
-document.addEventListener('gesturestart', function(e) {
-  e.preventDefault();
-}, { passive: false });
-
-document.addEventListener('gesturechange', function(e) {
-  e.preventDefault();
-}, { passive: false });
-
-document.addEventListener('gestureend', function(e) {
-  e.preventDefault();
-}, { passive: false });
-
-// 2. Bloquear zoom por doble toque
 var lastTouchEnd = 0;
 document.addEventListener('touchend', function(e) {
   var now = Date.now();
-  if (now - lastTouchEnd <= 300) {
-    e.preventDefault();
-  }
+  if (now - lastTouchEnd <= 300) e.preventDefault();
   lastTouchEnd = now;
 }, { passive: false });
 
-// 3. Bloquear zoom con Ctrl + rueda (desktop)
 document.addEventListener('wheel', function(e) {
   if (e.ctrlKey) e.preventDefault();
 }, { passive: false });
-
-// 4. Bloquear el "rebote" elástico del body
-document.body.addEventListener('touchmove', function(e) {
-  // Solo bloquea si no es dentro de un contenedor scrolleable
-  if (!e.target.closest('#terminal') && !e.target.closest('#preview-box')) {
-    e.preventDefault();
-  }
-}, { passive: false });
-
-// 5. Bloquear pull-to-refresh
-var initialY = 0;
-document.addEventListener('touchstart', function(e) {
-  initialY = e.touches[0].clientY;
-}, { passive: true });
-
-document.addEventListener('touchmove', function(e) {
-  var y = e.touches[0].clientY;
-  var term = document.getElementById('terminal');
-  if (term.scrollTop === 0 && y > initialY) {
-    e.preventDefault();
-  }
-}, { passive: false });
-
-
-
 // ===== FIN BLOQUEO =====
-
-// ... resto del código (ASCII_ARTS, etc.) ...
 
 // ============================================================
 // ASCII ARTS
@@ -185,373 +114,192 @@ document.addEventListener('touchmove', function(e) {
 var ASCII_ARTS = {};
 
 ASCII_ARTS.arch = [
-"                   -`",
-"                  .o+`",
-"                 `ooo/",
-"                `+oooo:",
-"               `+oooooo:",
-"               -+oooooo+:",
-"             `/:-:++oooo+:",
-"            `/++++/+++++++:",
-"           `/++++++++++++++:",
-"          `/+++o$2oooooooo$1oooo/`",
-"         ./$2ooosssso++osssssso$1+`",
-"$2       .oossssso-````/ossssss+`",
-"       -osssssso.      :ssssssso.",
-"      :osssssss/        osssso+++.",
-"     /ossssssss/        +ssssooo/-",
-"   `/ossssso+/:-        -:/+osssso+-",
-"  `+sso+:-`                 `.-/+oso:",
-" `++:.                           `-/+",
+"                   -`", "                  .o+`", "                 `ooo/", "                `+oooo:",
+"               `+oooooo:", "               -+oooooo+:", "             `/:-:++oooo+:",
+"            `/++++/+++++++:", "           `/++++++++++++++:", "          `/+++o$2oooooooo$1oooo/`",
+"         ./$2ooosssso++osssssso$1+`", "$2       .oossssso-````/ossssss+`",
+"       -osssssso.      :ssssssso.", "      :osssssss/        osssso+++.",
+"     /ossssssss/        +ssssooo/-", "   `/ossssso+/:-        -:/+osssso+-",
+"  `+sso+:-`                 `.-/+oso:", " `++:.                           `-/+",
 " .`                                 `/"
 ].join("\n");
 
 ASCII_ARTS.ubuntu = [
-"                             ....",
-"              $1.',:clooo:  $2.:looooo:.",
-"           $1.;looooooooc  $2.oooooooooo'",
-"        $1.;looooool:,''.  $2:ooooooooooc",
-"       $1;looool;.         $2'oooooooooo,",
-"      $1;clool'             $2.cooooooc.  $1,,",
-"         $1...                $2......  $1.:oo,",
-"  $2.;clol:,.                        $1.loooo'",
-" $2:ooooooooo,                        $1'ooool",
-"$2'ooooooooooo.                        $1loooo.",
-"$2'ooooooooool                         $1coooo.",
-" $2,loooooooc.                        $1.loooo.",
-"   $2.,;;;'.                          $1;ooooc",
-"       $1...                         $1,ooool.",
-"    $1.cooooc.              $2..',,'.  $1.cooo.",
-"      $1;ooooo:.           $2;oooooooc.  $1:l.",
-"       $1.coooooc,..      $2coooooooooo.",
-"         $1.:ooooooolc:. $2.ooooooooooo'",
-"           $1.':loooooo;  $2,oooooooooc",
-"               $1..';::c'  $2.;loooo:'"
+"                             ....", "              $1.',:clooo:  $2.:looooo:.",
+"           $1.;looooooooc  $2.oooooooooo'", "        $1.;looooool:,''.  $2:ooooooooooc",
+"       $1;looool;.         $2'oooooooooo,", "      $1;clool'             $2.cooooooc.  $1,,",
+"         $1...                $2......  $1.:oo,", "  $2.;clol:,.                        $1.loooo'",
+" $2:ooooooooo,                        $1'ooool", "$2'ooooooooooo.                        $1loooo.",
+"$2'ooooooooool                         $1coooo.", " $2,loooooooc.                        $1.loooo.",
+"   $2.,;;;'.                          $1;ooooc", "       $1...                         $1,ooool.",
+"    $1.cooooc.              $2..',,'.  $1.cooo.", "      $1;ooooo:.           $2;oooooooc.  $1:l.",
+"       $1.coooooc,..      $2coooooooooo.", "         $1.:ooooooolc:. $2.ooooooooooo'",
+"           $1.':loooooo;  $2,oooooooooc", "               $1..';::c'  $2.;loooo:'"
 ].join("\n");
 
 ASCII_ARTS.debian = [
-"        $2_,met$$$$$$$$$$gg.",
-"     ,g$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$P.",
-"   ,g$$$$P\"\"       \"\"\"Y$$$$.\".",
-"  ,$$$$P'              `$$$$$$.",
-"',$$$$P       ,ggs.     `$$$$b:",
-"`d$$$$'     ,$P\"'   $1.$2    $$$$$$",
-" $$$$P      d$'     $1,$2    $$$$P",
-" $$$$:      $$$.   $1-$2    ,d$$$$'",
-" $$$$;      Y$b._   _,d$P'",
-" Y$$$$.    $1`.$2`\"Y$$$$$$$$P\"'",
-" `$$$$b      $1\"-.__",
-"  $2`Y$$$$b",
-"   `Y$$$$.",
-"     `$$$$b.",
-"       `Y$$$$b.",
-"         `\"Y$$b._",
-"             `\"\"\"\""
+"        $2_,met$$$$$$$$$$gg.", "     ,g$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$P.",
+"   ,g$$$$P\"\"       \"\"\"Y$$$$.\".", "  ,$$$$P'              `$$$$$$.",
+"',$$$$P       ,ggs.     `$$$$b:", "`d$$$$'     ,$P\"'   $1.$2    $$$$$$",
+" $$$$P      d$'     $1,$2    $$$$P", " $$$$:      $$$.   $1-$2    ,d$$$$'",
+" $$$$;      Y$b._   _,d$P'", " Y$$$$.    $1`.$2`\"Y$$$$$$$$P\"'",
+" `$$$$b      $1\"-.__", "  $2`Y$$$$b", "   `Y$$$$.", "     `$$$$b.",
+"       `Y$$$$b.", "         `\"Y$$b._", "             `\"\"\"\""
 ].join("\n");
 
 ASCII_ARTS.fedora = [
-"             .',;::::;,'.",
-"         .';:cccccccccccc:;,.",
-"      .;cccccccccccccccccccccc;.",
-"    .:cccccccccccccccccccccccccc:.",
-"  .;ccccccccccccc;$2.:dddl:.$1;ccccccc;.",
-" .:ccccccccccccc;$2OWMKOOXMWd$1;ccccccc:.",
-".:ccccccccccccc;$2KMMc$1;cc;$2xMMc$1;ccccccc:.",
-",cccccccccccccc;$2MMM.$1;cc;$2;WW:$1;cccccccc,",
-":cccccccccccccc;$2MMM.$1;cccccccccccccccc:",
-":ccccccc;$2oxOOOo$1;$2MMM000k.$1;cccccccccccc:",
-"cccccc;$20MMKxdd:$1;$2MMMkddc.$1;cccccccccccc;",
-"ccccc;$2XMO'$1;cccc;$2MMM.$1;cccccccccccccccc'",
-"ccccc;$2MMo$1;ccccc;$2MMW.$1;ccccccccccccccc;",
-"ccccc;$20MNc.$1ccc$2.xMMd$1;ccccccccccccccc;",
-"cccccc;$2dNMWXXXWM0:$1;cccccccccccccc:,",
-"cccccccc;$2.:odl:.$1;cccccccccccccc:,.",
-"ccccccccccccccccccccccccccccc:'.",
-":ccccccccccccccccccccccc:;,..",
-" ':cccccccccccccccc::;,."
+"             .',;::::;,'.", "         .';:cccccccccccc:;,.",
+"      .;cccccccccccccccccccccc;.", "    .:cccccccccccccccccccccccccc:.",
+"  .;ccccccccccccc;$2.:dddl:.$1;ccccccc;.", " .:ccccccccccccc;$2OWMKOOXMWd$1;ccccccc:.",
+".:ccccccccccccc;$2KMMc$1;cc;$2xMMc$1;ccccccc:.", ",cccccccccccccc;$2MMM.$1;cc;$2;WW:$1;cccccccc,",
+":cccccccccccccc;$2MMM.$1;cccccccccccccccc:", ":ccccccc;$2oxOOOo$1;$2MMM000k.$1;cccccccccccc:",
+"cccccc;$20MMKxdd:$1;$2MMMkddc.$1;cccccccccccc;", "ccccc;$2XMO'$1;cccc;$2MMM.$1;cccccccccccccccc'",
+"ccccc;$2MMo$1;ccccc;$2MMW.$1;ccccccccccccccc;", "ccccc;$20MNc.$1ccc$2.xMMd$1;ccccccccccccccc;",
+"cccccc;$2dNMWXXXWM0:$1;cccccccccccccc:,", "cccccccc;$2.:odl:.$1;cccccccccccccc:,.",
+"ccccccccccccccccccccccccccccc:'.", ":ccccccccccccccccccccccc:;,..", " ':cccccccccccccccc::;,."
 ].join("\n");
 
 ASCII_ARTS.mint = [
-"MMMMMMMMMMMMMMMMMMMMMMMMMmds.",
-"MMMMMMMMMMMMMMMMMMMMMMMMNMMMMNNdy.",
-"MMMMMMMMMMMMMMMMMMMMMMMMNMMMMMMMMNy.",
-"MMMMMMMM$2................$1MMMMMMMMMMMMM.",
-"MMMMMMMM$2:dddddddddddddddd$1MMMMMMMMMMMM.",
-"MMMMMMMM$2:dddddddddddddddd$1MMMMMMMMMMMM.",
-"MMMMMMMM$2:dddddddddddddddd$1MMMMMMMMMMMM.",
-"MMMMMMMM$2:dddddddd$1MMMMMMMMMMMMMMMMMMMMM.",
-"MMMMMMMM$2:dddddddd$1MMMMMMMMMMMMMMMMMMMMM.",
-"MMMMMMMM$2:dddddddd$1MMMMMMMMMMMMMMMMMMMMM.",
-"MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.",
-"MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.",
-"MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.",
-"MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.",
-"MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.",
-"MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.",
-"MMMMMMMM$2......$1MMMMMMMMMMM$2dddddddd$1MMMMM.",
-"MMMMMMMMMMMMMMMMMMMMMMMMM$2dddddddd$1MMMMM.",
-"MMMMMMMMMMMMMMMMMMMMMMMMM$2dddddddd$1MMMMM.",
-"MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM."
+"MMMMMMMMMMMMMMMMMMMMMMMMMmds.", "MMMMMMMMMMMMMMMMMMMMMMMMNMMMMNNdy.",
+"MMMMMMMMMMMMMMMMMMMMMMMMNMMMMMMMMNy.", "MMMMMMMM$2................$1MMMMMMMMMMMMM.",
+"MMMMMMMM$2:dddddddddddddddd$1MMMMMMMMMMMM.", "MMMMMMMM$2:dddddddddddddddd$1MMMMMMMMMMMM.",
+"MMMMMMMM$2:dddddddddddddddd$1MMMMMMMMMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMMMMMMMMMMMMMMM.",
+"MMMMMMMM$2:dddddddd$1MMMMMMMMMMMMMMMMMMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMMMMMMMMMMMMMMM.",
+"MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.",
+"MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.",
+"MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.",
+"MMMMMMMM$2......$1MMMMMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMMMMMMMMMMMMMMMMMMM$2dddddddd$1MMMMM.",
+"MMMMMMMMMMMMMMMMMMMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM."
 ].join("\n");
 
 ASCII_ARTS.opensuse = [
-"           $2.;ldkO0000Okdl;.",
-"       .;d00xl:^''''''^:ok00d;.",
-"     .d00l'                'o00d.",
-"   .d0Kd'$1  Okxol:;,.          $2:O0d",
-"  .OK$1KKK0kOKKKKKKKKKKOxo:,      $2lKO.",
-" ,0K$1KKKKKKKKKKKKKKK0P^$2,,,$1^dx:$2    ;00,",
-".OK$1KKKKKKKKKKKKKKKk'$2.oOPPb.$1'0k.$2   cKO.",
-":KK$1KKKKKKKKKKKKKKK: $2kKx..dd $1lKd$2   'OK:",
-"dKK$1KKKKKKKKKOx0KKKd $2^0KKKO' $1kKKc$2   dKd",
-"dKK$1KKKKKKKKKK;.;oOKx,..$2^$1..;kKKK0.$2  dKd",
-":KK$1KKKKKKKKKK0o;...^cdxxOK0O/^^'  $2.0K:",
-" kKK$1KKKKKKKKKKKKK0x;,,......,;od  $2lKk",
-" '0K$1KKKKKKKKKKKKKKKKKKKK00KKOo^  $2c00'",
-"  'kK$1KKOxddxkOO00000Okxoc;''   $2.dKk'",
-"    l0Ko.                    .c00l'",
-"     'l0Kk:.              .;xK0l'",
-"        'lkK0xl:;,,,,;:ldO0kl'",
-"            '^:ldxkkkkxdl:^'"
+"           $2.;ldkO0000Okdl;.", "       .;d00xl:^''''''^:ok00d;.",
+"     .d00l'                'o00d.", "   .d0Kd'$1  Okxol:;,.          $2:O0d",
+"  .OK$1KKK0kOKKKKKKKKKKOxo:,      $2lKO.", " ,0K$1KKKKKKKKKKKKKKK0P^$2,,,$1^dx:$2    ;00,",
+".OK$1KKKKKKKKKKKKKKKk'$2.oOPPb.$1'0k.$2   cKO.", ":KK$1KKKKKKKKKKKKKKK: $2kKx..dd $1lKd$2   'OK:",
+"dKK$1KKKKKKKKKOx0KKKd $2^0KKKO' $1kKKc$2   dKd", "dKK$1KKKKKKKKKK;.;oOKx,..$2^$1..;kKKK0.$2  dKd",
+":KK$1KKKKKKKKKK0o;...^cdxxOK0O/^^'  $2.0K:", " kKK$1KKKKKKKKKKKKK0x;,,......,;od  $2lKk",
+" '0K$1KKKKKKKKKKKKKKKKKKKK00KKOo^  $2c00'", "  'kK$1KKOxddxkOO00000Okxoc;''   $2.dKk'",
+"    l0Ko.                    .c00l'", "     'l0Kk:.              .;xK0l'",
+"        'lkK0xl:;,,,,;:ldO0kl'", "            '^:ldxkkkkxdl:^'"
 ].join("\n");
 
 ASCII_ARTS.alpine = [
-"       .hddddddddddddddddddddddh.",
-"      :dddddddddddddddddddddddddd:",
-"     /dddddddddddddddddddddddddddd/",
-"    +dddddddddddddddddddddddddddddd+",
-"  `sdddddddddddddddddddddddddddddddds`",
-" `ydddddddddddd++hdddddddddddddddddddy`",
-".hddddddddddd+`  `+ddddh:-sdddddddddddh.",
-"hdddddddddd+`      `+y:    .sddddddddddh",
-"ddddddddh+`   `//`   `.`     -sddddddddd",
-"ddddddh+`   `/hddh/`   `:s-    -sddddddd",
-"ddddh+`   `/+/dddddh/`   `+s-    -sddddd",
-"ddd+`   `/o` :dddddddh/`   `oy-    .yddd",
-"hdddyo+ohddyosdddddddddho+oydddy++ohdddh",
-".hddddddddddddddddddddddddddddddddddddh.",
-" `yddddddddddddddddddddddddddddddddddy`",
-"  `sdddddddddddddddddddddddddddddddds`",
-"    +dddddddddddddddddddddddddddddd+",
-"     /dddddddddddddddddddddddddddd/",
-"      :dddddddddddddddddddddddddd:",
-"       .hddddddddddddddddddddddh."
+"       .hddddddddddddddddddddddh.", "      :dddddddddddddddddddddddddd:",
+"     /dddddddddddddddddddddddddddd/", "    +dddddddddddddddddddddddddddddd+",
+"  `sdddddddddddddddddddddddddddddddds`", " `ydddddddddddd++hdddddddddddddddddddy`",
+".hddddddddddd+`  `+ddddh:-sdddddddddddh.", "hdddddddddd+`      `+y:    .sddddddddddh",
+"ddddddddh+`   `//`   `.`     -sddddddddd", "ddddddh+`   `/hddh/`   `:s-    -sddddddd",
+"ddddh+`   `/+/dddddh/`   `+s-    -sddddd", "ddd+`   `/o` :dddddddh/`   `oy-    .yddd",
+"hdddyo+ohddyosdddddddddho+oydddy++ohdddh", ".hddddddddddddddddddddddddddddddddddddh.",
+" `yddddddddddddddddddddddddddddddddddy`", "  `sdddddddddddddddddddddddddddddddds`",
+"    +dddddddddddddddddddddddddddddd+", "     /dddddddddddddddddddddddddddd/",
+"      :dddddddddddddddddddddddddd:", "       .hddddddddddddddddddddddh."
 ].join("\n");
 
 ASCII_ARTS.gentoo = [
-"         -/oyddmdhs+:.",
-"     -o$2dNMMMMMMMMNNmhy+$1-`",
-"   -y$2NMMMMMMMMMMMNNNmmdhy$1+-",
-" `o$2mMMMMMMMMMMMMNmdmmmmddhhy$1/`",
-" om$2MMMMMMMMMMMN$1hhyyyo$2hmdddhhhd$1o`",
-".y$2dMMMMMMMMMMd$1hs++so/s$2mdddhhhhdm$1+`",
-" oy$2hdmNMMMMMMMN$1dyooy$2dmddddhhhhyhN$1d.",
-"  :o$2yhhdNNMMMMMMMNNNmmdddhhhhhyym$1Mh",
-"    .:$2+sydNMMMMMNNNmmmdddhhhhhhmM$1my",
-"       /m$2MMMMMMNNNmmmdddhhhhhmMNh$1s:",
-"    `o$2NMMMMMMMNNNmmmddddhhdmMNhs$1+`",
-"  `s$2NMMMMMMMMNNNmmmdddddmNMmhs$1/.",
-" /N$2MMMMMMMMNNNNmmmdddmNMNdso$1:`",
-"+M$2MMMMMMNNNNNmmmmdmNMNdso$1/-",
-"yM$2MNNNNNNNmmmmmNNMmhs+/$1-`",
-"/h$2MMNNNNNNNNMNdhs++/$1-`",
-"`/$2ohdmmddhys+++/:$1.`",
-"  `-//////:--."
+"         -/oyddmdhs+:.", "     -o$2dNMMMMMMMMNNmhy+$1-`", "   -y$2NMMMMMMMMMMMNNNmmdhy$1+-",
+" `o$2mMMMMMMMMMMMMNmdmmmmddhhy$1/`", " om$2MMMMMMMMMMMN$1hhyyyo$2hmdddhhhd$1o`",
+".y$2dMMMMMMMMMMd$1hs++so/s$2mdddhhhhdm$1+`", " oy$2hdmNMMMMMMMN$1dyooy$2dmddddhhhhyhN$1d.",
+"  :o$2yhhdNNMMMMMMMNNNmmdddhhhhhyym$1Mh", "    .:$2+sydNMMMMMNNNmmmdddhhhhhhmM$1my",
+"       /m$2MMMMMMNNNmmmdddhhhhhmMNh$1s:", "    `o$2NMMMMMMMNNNmmmddddhhdmMNhs$1+`",
+"  `s$2NMMMMMMMMNNNmmmdddddmNMmhs$1/.", " /N$2MMMMMMMMNNNNmmmdddmNMNdso$1:`",
+"+M$2MMMMMMNNNNNmmmmdmNMNdso$1/-", "yM$2MNNNNNNNmmmmmNNMmhs+/$1-`",
+"/h$2MMNNNNNNNNMNdhs++/$1-`", "`/$2ohdmmddhys+++/:$1.`", "  `-//////:--."
 ].join("\n");
 
 ASCII_ARTS.manjaro = [
-"██████████████████  ████████",
-"██████████████████  ████████",
-"██████████████████  ████████",
-"██████████████████  ████████",
-"████████            ████████",
-"████████  ████████  ████████",
-"████████  ████████  ████████",
-"████████  ████████  ████████",
-"████████  ████████  ████████",
-"████████  ████████  ████████",
-"████████  ████████  ████████",
-"████████  ████████  ████████",
-"████████  ████████  ████████",
-"████████  ████████  ████████"
+"██████████████████  ████████", "██████████████████  ████████", "██████████████████  ████████",
+"██████████████████  ████████", "████████            ████████", "████████  ████████  ████████",
+"████████  ████████  ████████", "████████  ████████  ████████", "████████  ████████  ████████",
+"████████  ████████  ████████", "████████  ████████  ████████", "████████  ████████  ████████",
+"████████  ████████  ████████", "████████  ████████  ████████"
 ].join("\n");
 
 ASCII_ARTS.kali = [
-"..............",
-"            ..,;:ccc,.",
-"          ......''';lxO.",
-".....''''..........,:ld;",
-"           .';;;:::;,,.x,",
-"      ..'''.            0Xxoc:,.  ...",
-"  ....                ,ONkc;,;cokOdc',.",
-" .                   OMo           ':$2dd$1o.",
-"                    dMc               :OO;",
-"                    0M.                 .:o.",
-"                    ;Wd",
-"                     ;XO,",
-"                       ,d0Odlc;,..",
-"                           ..',;:cdOOd::,.",
-"                                    .:d;.':;.",
-"                                       'd,  .'",
-"                                         ;l   ..",
-"                                          .o",
-"                                            c",
-"                                            .'",
-"                                             ."
+"..............", "            ..,;:ccc,.", "          ......''';lxO.",
+".....''''..........,:ld;", "           .';;;:::;,,.x,", "      ..'''.            0Xxoc:,.  ...",
+"  ....                ,ONkc;,;cokOdc',.", " .                   OMo           ':$2dd$1o.",
+"                    dMc               :OO;", "                    0M.                 .:o.",
+"                    ;Wd", "                     ;XO,", "                       ,d0Odlc;,..",
+"                           ..',;:cdOOd::,.", "                                    .:d;.':;.",
+"                                       'd,  .'", "                                         ;l   ..",
+"                                          .o", "                                            c",
+"                                            .'", "                                             ."
 ].join("\n");
 
 ASCII_ARTS.void_ = [
-"                __.;=====;.__",
-"            _.=+==++=++=+=+===;.",
-"             -=+++=+===+=+=+++++=_",
-"        .     -=:``     `--==+=++==.",
-"       _vi,    `            --+=++++:",
-"      .uvnvi.       _._       -==+==+.",
-"     .vvnvnI`    .;==|==;.     :|=||=|.",
-"$2+QmQQm$1pvvnv;$2 _yYsyQQWUUQQQm #QmQ#$1:$2QQQWUV$QQm.",
-" $2-QQWQW$1pvvo$2wZ?.wQQQE$1==<$2QWWQ/QWQW.QQWW$1(:$2 jQWQE",
-"  $2-$QQQQmmU'  jQQQ$1@+=<$2QWQQ)mQQQ.mQQQC$1+;$2jWQQ@'",
-"   $2-$WQ8Y$1nI:$2   QWQQwgQQWV$1`$2mWQQ.jQWQQgyyWW@!",
-"     $1-1vvnvv.     `~+++`        ++|+++",
-"      +vnvnnv,                 `-|===",
-"       +vnvnvns.           .      :=-",
-"        -Invnvvnsi..___..=sv=.     `",
-"          +Invnvnvnnnnnnnnvvnn;.",
-"            ~|Invnvnvvnvvvnnv}+",
-"               -~|{*l}*|~"
+"                __.;=====;.__", "            _.=+==++=++=+=+===;.",
+"             -=+++=+===+=+=+++++=_", "        .     -=:``     `--==+=++==.",
+"       _vi,    `            --+=++++:", "      .uvnvi.       _._       -==+==+.",
+"     .vvnvnI`    .;==|==;.     :|=||=|.", "$2+QmQQm$1pvvnv;$2 _yYsyQQWUUQQQm #QmQ#$1:$2QQQWUV$QQm.",
+" $2-QQWQW$1pvvo$2wZ?.wQQQE$1==<$2QWWQ/QWQW.QQWW$1(:$2 jQWQE", "  $2-$QQQQmmU'  jQQQ$1@+=<$2QWQQ)mQQQ.mQQQC$1+;$2jWQQ@'",
+"   $2-$WQ8Y$1nI:$2   QWQQwgQQWV$1`$2mWQQ.jQWQQgyyWW@!", "     $1-1vvnvv.     `~+++`        ++|+++",
+"      +vnvnnv,                 `-|===", "       +vnvnvns.           .      :=-",
+"        -Invnvvnsi..___..=sv=.     `", "          +Invnvnvnnnnnnnnvvnn;.",
+"            ~|Invnvnvvnvvvnnv}+", "               -~|{*l}*|~"
 ].join("\n");
 
 ASCII_ARTS.nixos = [
-"          $1▗▄▄▄       $2▗▄▄▄▄    ▄▄▄▖",
-"          $1▜███▙       $2▜███▙  ▟███▛",
-"           $1▜███▙       $2▜███▙▟███▛",
-"            $1▜███▙       $2▜██████▛",
-"     $1▟█████████████████▙ $2▜████▛     $3▟▙",
-"    $1▟███████████████████▙ $2▜███▙    $3▟██▙",
-"           $6▄▄▄▄▖           $2▜███▙  $3▟███▛",
-"          $6▟███▛             $2▜██▛ $3▟███▛",
-"         $6▟███▛               $2▜▛ $3▟███▛",
-"$6▟███████████▛                  $3▟██████████▙",
-"$6▜██████████▛                  $3▟███████████▛",
-"      $6▟███▛ $5▟▙               $3▟███▛",
-"     $6▟███▛ $5▟██▙             $3▟███▛",
-"    $6▟███▛  $5▜███▙           $3▝▀▀▀▀",
-"    $6▜██▛    $5▜███▙ $4▜██████████████████▛",
-"     $6▜▛     $5▟████▙ $4▜████████████████▛",
-"           $5▟██████▙         $4▜███▙",
-"          $5▟███▛▜███▙         $4▜███▙",
-"         $5▟███▛  ▜███▙         $4▜███▙",
-"         $5▝▀▀▀    ▀▀▀▀▘         $4▀▀▀▘"
+"          $1▗▄▄▄       $2▗▄▄▄▄    ▄▄▄▖", "          $1▜███▙       $2▜███▙  ▟███▛",
+"           $1▜███▙       $2▜███▙▟███▛", "            $1▜███▙       $2▜██████▛",
+"     $1▟█████████████████▙ $2▜████▛     $3▟▙", "    $1▟███████████████████▙ $2▜███▙    $3▟██▙",
+"           $6▄▄▄▄▖           $2▜███▙  $3▟███▛", "          $6▟███▛             $2▜██▛ $3▟███▛",
+"         $6▟███▛               $2▜▛ $3▟███▛", "$6▟███████████▛                  $3▟██████████▙",
+"$6▜██████████▛                  $3▟███████████▛", "      $6▟███▛ $5▟▙               $3▟███▛",
+"     $6▟███▛ $5▟██▙             $3▟███▛", "    $6▟███▛  $5▜███▙           $3▝▀▀▀▀",
+"    $6▜██▛    $5▜███▙ $4▜██████████████████▛", "     $6▜▛     $5▟████▙ $4▜████████████████▛",
+"           $5▟██████▙         $4▜███▙", "          $5▟███▛▜███▙         $4▜███▙",
+"         $5▟███▛  ▜███▙         $4▜███▙", "         $5▝▀▀▀    ▀▀▀▀▘         $4▀▀▀▘"
 ].join("\n");
 
 ASCII_ARTS.popos = [
-"             /////////////",
-"         /////////////////////",
-"      ///////$2*767$1////////////////",
-"    //////$27676767676*$1//////////////",
-"   /////$276767$1//$27676767$1//////////////",
-"  /////$2767676$1///$2*76767$1///////////////",
-" ///////$2767676$1///$276767$1.///$27676*$1///////",
-"/////////$2767676$1//$276767$1///$2767676$1////////",
-"//////////$276767676767$1////$276767$1/////////",
-"///////////$276767676$1//////$27676$1//////////",
-"////////////,$27676$1,///////$2767$1///////////",
-"/////////////*$27676$1///////$276$1////////////",
-"///////////////$27676$1////////////////////",
-" ///////////////$27676$1///$2767$1////////////",
-"  //////////////////////$2'$1////////////",
-"   //////$2.7676767676767676767,$1//////",
-"    /////$2767676767676767676767$1/////",
-"      ///////////////////////////",
-"         /////////////////////",
-"             /////////////"
+"             /////////////", "         /////////////////////", "      ///////$2*767$1////////////////",
+"    //////$27676767676*$1//////////////", "   /////$276767$1//$27676767$1//////////////",
+"  /////$2767676$1///$2*76767$1///////////////", " ///////$2767676$1///$276767$1.///$27676*$1///////",
+"/////////$2767676$1//$276767$1///$2767676$1////////", "//////////$276767676767$1////$276767$1/////////",
+"///////////$276767676$1//////$27676$1//////////", "////////////,$27676$1,///////$2767$1///////////",
+"/////////////*$27676$1///////$276$1////////////", "///////////////$27676$1////////////////////",
+" ///////////////$27676$1///$2767$1////////////", "  //////////////////////$2'$1////////////",
+"   //////$2.7676767676767676767,$1//////", "    /////$2767676767676767676767$1/////",
+"      ///////////////////////////", "         /////////////////////", "             /////////////"
 ].join("\n");
 
 ASCII_ARTS.android = [
-"         -o          o-",
-"          +hydNNNNdyh+",
-"        +mMMMMMMMMMMMMm+",
-"      `dMM$2m:$1NMMMMMMN$2:m$1MMd`",
-"      hMMMMMMMMMMMMMMMMMMh",
-"  ..  yyyyyyyyyyyyyyyyyyyy  ..",
-".mMMm`MMMMMMMMMMMMMMMMMMMM`mMMm.",
-":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:",
-":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:",
-":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:",
-":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:",
-"-MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM-",
-" +yy+ MMMMMMMMMMMMMMMMMMMM +yy+",
-"      mMMMMMMMMMMMMMMMMMMm",
-"      `/++MMMMh++hMMMM++/`",
-"          MMMMo  oMMMM",
-"          MMMMo  oMMMM",
-"          oNMm-  -mMNs"
+"         -o          o-", "          +hydNNNNdyh+", "        +mMMMMMMMMMMMMm+",
+"      `dMM$2m:$1NMMMMMMN$2:m$1MMd`", "      hMMMMMMMMMMMMMMMMMMh", "  ..  yyyyyyyyyyyyyyyyyyyy  ..",
+".mMMm`MMMMMMMMMMMMMMMMMMMM`mMMm.", ":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:", ":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:",
+":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:", ":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:", "-MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM-",
+" +yy+ MMMMMMMMMMMMMMMMMMMM +yy+", "      mMMMMMMMMMMMMMMMMMMm", "      `/++MMMMh++hMMMM++/`",
+"          MMMMo  oMMMM", "          MMMMo  oMMMM", "          oNMm-  -mMNs"
 ].join("\n");
 
 ASCII_ARTS.macos = [
-"                     ..'",
-"                 ,xNMM.",
-"               .OMMMMo",
-"               lMM\"",
-"     .;loddo:.  .olloddol;.",
-"   cKMMMMMMMMMMNWMMMMMMMMMM0:",
-" $2.KMMMMMMMMMMMMMMMMMMMMMMMWd.",
-" XMMMMMMMMMMMMMMMMMMMMMMMX.",
-"$3;MMMMMMMMMMMMMMMMMMMMMMMM:",
-":MMMMMMMMMMMMMMMMMMMMMMMM:",
-"$4.MMMMMMMMMMMMMMMMMMMMMMMMX.",
-" kMMMMMMMMMMMMMMMMMMMMMMMMWd.",
-" $5'XMMMMMMMMMMMMMMMMMMMMMMMMMMk",
-"  'XMMMMMMMMMMMMMMMMMMMMMMMMK.",
-"    $6kMMMMMMMMMMMMMMMMMMMMMMd",
-"     ;KMMMMMMMWXXWMMMMMMMk.",
+"                     ..'", "                 ,xNMM.", "               .OMMMMo", "               lMM\"",
+"     .;loddo:.  .olloddol;.", "   cKMMMMMMMMMMNWMMMMMMMMMM0:", " $2.KMMMMMMMMMMMMMMMMMMMMMMMWd.",
+" XMMMMMMMMMMMMMMMMMMMMMMMX.", "$3;MMMMMMMMMMMMMMMMMMMMMMMM:", ":MMMMMMMMMMMMMMMMMMMMMMMM:",
+"$4.MMMMMMMMMMMMMMMMMMMMMMMMX.", " kMMMMMMMMMMMMMMMMMMMMMMMMWd.", " $5'XMMMMMMMMMMMMMMMMMMMMMMMMMMk",
+"  'XMMMMMMMMMMMMMMMMMMMMMMMMK.", "    $6kMMMMMMMMMMMMMMMMMMMMMMd", "     ;KMMMMMMMWXXWMMMMMMMk.",
 "       \"cooc*\"    \"*coo'\""
 ].join("\n");
 
 ASCII_ARTS.parrot = [
-"  `:oho/-`",
-"`mMMMMMMMMMMMNmmdhy-",
-" dMMMMMMMMMMMMMMMMMMs`",
-" +MMsohNMMMMMMMMMMMMMm/",
-" .My   .+dMMMMMMMMMMMMMh.",
-"  +       :NMMMMMMMMMMMMNo",
-"           `yMMMMMMMMMMMMMm:",
-"             /NMMMMMMMMMMMMMy`",
-"              .hMMMMMMMMMMMMMN+",
-"                  ``-NMMMMMMMMMd-",
-"                     /MMMMMMMMMMMs`",
-"                      mMMMMMMMsyNMN/",
-"                      +MMMMMMMo  :sNh.",
-"                      `NMMMMMMm     -o/",
-"                       oMMMMMMM.",
-"                       `NMMMMMM+",
-"                        +MMd/NMh",
-"                         mMm -mN`",
-"                         /MM  `h:",
-"                          dM`   .",
-"                          :M-",
-"                           d:",
-"                           -+",
-"                            -"
+"  `:oho/-`", "`mMMMMMMMMMMMNmmdhy-", " dMMMMMMMMMMMMMMMMMMs`", " +MMsohNMMMMMMMMMMMMMm/",
+" .My   .+dMMMMMMMMMMMMMh.", "  +       :NMMMMMMMMMMMMNo", "           `yMMMMMMMMMMMMMm:",
+"             /NMMMMMMMMMMMMMy`", "              .hMMMMMMMMMMMMMN+", "                  ``-NMMMMMMMMMd-",
+"                     /MMMMMMMMMMMs`", "                      mMMMMMMMsyNMN/", "                      +MMMMMMMo  :sNh.",
+"                      `NMMMMMMm     -o/", "                       oMMMMMMM.", "                       `NMMMMMM+",
+"                        +MMd/NMh", "                         mMm -mN`", "                         /MM  `h:",
+"                          dM`   .", "                          :M-", "                           d:",
+"                           -+", "                            -"
 ].join("\n");
 
 ASCII_ARTS.adelie = [
-"                 $3 ,-^-___",
-"$3                /\\\\\\///",
-"$2refined.$1       /\\\\\\\\//",
-"$2reliable.$1     /\\\\\\///",
-"$2ready.$1       /\\\\/////\\",
-"        __///\\\\\\\\/////\\",
-"$3     _//////\\\\\\\\\\\\///",
-"$1   ///////$3\\\\\\\\\\\\//",
-"          //////$1\\\\\\\\/",
-"          /////\\\\\\\\/",
-"          /////$3\\\\\\\\/",
-"         /\\///\\\\/",
-"         /\\\\\\/$1\\\\/",
-"         /\\\\\\\\//",
-"        //////",
-"      /// $3\\\\\\\\\\"
+"                 $3 ,-^-___", "$3                /\\\\\\///", "$2refined.$1       /\\\\\\\\//",
+"$2reliable.$1     /\\\\\\///", "$2ready.$1       /\\\\/////\\", "        __///\\\\\\\\/////\\",
+"$3     _//////\\\\\\\\\\\\///", "$1   ///////$3\\\\\\\\\\\\//", "          //////$1\\\\\\\\/",
+"          /////\\\\\\\\/", "          /////$3\\\\\\\\/", "         /\\///\\\\/",
+"         /\\\\\\/$1\\\\/", "         /\\\\\\\\//", "        //////", "      /// $3\\\\\\\\\\"
 ].join("\n");
 
 // ============================================================
@@ -565,30 +313,21 @@ var ANSI_COLORS = {
 };
 
 var LOGO_PALETTE_DEFAULT = ['32','36','33','31','35','34','37','92','96'];
-
 var THEMES = {
-  arch:     ['36','34'],
-  ubuntu:   ['31','33'],
-  mint:     ['32','37'],
-  fedora:   ['34','94'],
-  opensuse: ['32','92'],
-  gentoo:   ['35','95'],
-  nixos:    ['34','36','35','31','32','94'],
-  popos:    ['36','33'],
-  android:  ['32','92'],
-  macos:    ['37','31','33','32','36','34']
+  arch: ['36','34'], ubuntu: ['31','33'], mint: ['32','37'],
+  fedora: ['34','94'], opensuse: ['32','92'], gentoo: ['35','95'],
+  nixos: ['34','36','35','31','32','94'], popos: ['36','33'],
+  android: ['32','92'], macos: ['37','31','33','32','36','34']
 };
-
-var INFO_STYLE = {
-  user:'#8ae234', at:'#d3d7cf', sep:'#555753', label:'#729fcf', value:'#d3d7cf'
-};
+var INFO_STYLE = { user:'#8ae234', at:'#d3d7cf', sep:'#555753', label:'#729fcf', value:'#d3d7cf' };
 
 // ============================================================
-// ESTADO
+// ESTADO Y PERSISTENCIA
 // ============================================================
-var STORAGE_KEY = 'fastfetch-web-v03';
+var STORAGE_KEY = 'fastfetch-web-v04';
 var state = {
   ascii: null,
+  installed: [], // Lista de ascii "instalados" con sudo meow add
   data: {
     user:'usuario', host:'iPhone', os:'iOS 17.4',
     kernel:'Darwin 23.4.0', uptime:'2 hours, 15 mins',
@@ -601,7 +340,7 @@ var state = {
 function saveState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      ascii: state.ascii, data: state.data, customThemes: state.customThemes
+      ascii: state.ascii, installed: state.installed, data: state.data, customThemes: state.customThemes
     }));
   } catch(e) {}
 }
@@ -611,13 +350,14 @@ function loadState() {
     if (!raw) return;
     var p = JSON.parse(raw);
     if (p.ascii && ASCII_ARTS[p.ascii]) state.ascii = p.ascii;
+    if (p.installed) state.installed = p.installed;
     if (p.data) Object.assign(state.data, p.data);
     if (p.customThemes) state.customThemes = p.customThemes;
   } catch(e) {}
 }
 
 // ============================================================
-// DOM
+// DOM Y HELPERS
 // ============================================================
 var output = document.getElementById('output');
 var input = document.getElementById('cmdInput');
@@ -638,10 +378,7 @@ function escapeHTML(s) {
 // ============================================================
 // BUILD
 // ============================================================
-function getPalette(name) {
-  return state.customThemes[name] || THEMES[name] || LOGO_PALETTE_DEFAULT;
-}
-
+function getPalette(name) { return state.customThemes[name] || THEMES[name] || LOGO_PALETTE_DEFAULT; }
 function stripPlaceholders(s) { return s.replace(/\$\d/g, ''); }
 
 function colorizeLogo(text, palette) {
@@ -669,312 +406,3 @@ function buildFastfetchHTML() {
     '<span style="color:' + INFO_STYLE.at + '">@</span>' +
     '<span style="color:' + INFO_STYLE.user + '">' + escapeHTML(d.host) + '</span>',
     '<span style="color:' + INFO_STYLE.sep + '">-------------------</span>',
-    infoLine('OS',       d.os),
-    infoLine('Host',     d.host),
-    infoLine('Kernel',   d.kernel),
-    infoLine('Uptime',   d.uptime),
-    infoLine('Shell',    d.shell),
-    infoLine('Terminal', d.terminal),
-    infoLine('CPU',      d.cpu),
-    infoLine('Memory',   d.memory)
-  ];
-  var maxLines = Math.max(artLines.length, infoLines.length);
-  var artWidth = 0;
-  for (var i = 0; i < artLines.length; i++) {
-    var w = stripPlaceholders(artLines[i]).length;
-    if (w > artWidth) artWidth = w;
-  }
-  var html = '';
-  for (var j = 0; j < maxLines; j++) {
-    var raw = artLines[j] || '';
-    var stripped = stripPlaceholders(raw);
-    var paddedStripped = stripped + new Array(Math.max(0, artWidth - stripped.length) + 1).join(' ');
-    // Reconstruir con placeholders: append padding al final del raw
-    var paddedRaw = raw + new Array(Math.max(0, artWidth - stripped.length) + 1).join(' ');
-    var coloredArt = colorizeLogo(paddedRaw, palette);
-    var info = infoLines[j] || '';
-    html += '<div class="ff-line"><span class="ff-art">' + coloredArt + '</span><span class="ff-info">   ' + info + '</span></div>';
-  }
-  return html;
-}
-
-function buildFastfetchPlainText() {
-  var d = state.data;
-  var artLines = ASCII_ARTS[state.ascii].split('\n').map(stripPlaceholders);
-  var infoLines = [
-    d.user + '@' + d.host,
-    '-------------------',
-    'OS: '       + d.os,
-    'Host: '     + d.host,
-    'Kernel: '   + d.kernel,
-    'Uptime: '   + d.uptime,
-    'Shell: '    + d.shell,
-    'Terminal: ' + d.terminal,
-    'CPU: '      + d.cpu,
-    'Memory: '   + d.memory
-  ];
-  var maxLines = Math.max(artLines.length, infoLines.length);
-  var artWidth = 0;
-  for (var i = 0; i < artLines.length; i++) {
-    if (artLines[i].length > artWidth) artWidth = artLines[i].length;
-  }
-  var out = '';
-  for (var j = 0; j < maxLines; j++) {
-    var a = (artLines[j] || '');
-    var pad = new Array(Math.max(0, artWidth - a.length) + 1).join(' ');
-    out += (a + pad) + '   ' + (infoLines[j] || '') + '\n';
-  }
-  return out;
-}
-
-function renderPreview() {
-  previewBox.innerHTML = buildFastfetchHTML();
-  previewBox.style.display = 'block';
-}
-
-// ============================================================
-// COMANDOS
-// ============================================================
-var commands = {};
-
-commands.help = function() {
-  print('Comandos disponibles:', 'dim');
-  print('  help                          - Muestra esta ayuda');
-  print('  list-ascii                    - Lista los ASCII disponibles');
-  print('  download <nombre>             - "Descarga" un ASCII');
-  print('  set <campo> <valor>           - Configura un dato');
-  print('  fields                        - Lista los campos configurables');
-  print('  preview                       - Previsualiza el resultado');
-  print('  theme                         - Ver temas configurados');
-  print('  theme <ascii> <c1> [c2...]    - Cambiar paleta de un ASCII');
-  print('  theme reset <ascii>           - Resetear paleta de un ASCII');
-  print('  export png|txt|pdf            - Exporta el resultado');
-  print('  save                          - Guardar config');
-  print('  reset                         - Borrar config guardada');
-  print('  clear                         - Limpia la terminal');
-};
-
-commands['list-ascii'] = function() {
-  print('ASCII disponibles:', 'dim');
-  Object.keys(ASCII_ARTS).forEach(function(k) { print('  • ' + k); });
-  print('Usa: download <nombre>', 'dim');
-};
-
-commands.download = function(args) {
-  var name = args[0];
-  if (!name) return print('Uso: download <nombre>', 'error');
-  if (!ASCII_ARTS[name]) return print('ASCII "' + name + '" no encontrado. Prueba list-ascii.', 'error');
-
-  print('Conectando al repositorio fastfetch-web...', 'dim');
-  print('Descargando ' + name + '...');
-
-  var bar = document.createElement('div');
-  bar.className = 'line progress';
-  output.appendChild(bar);
-
-  var pct = 0;
-  var interval = setInterval(function() {
-    pct += 4;
-    if (pct > 100) pct = 100;
-    var filled = Math.round(pct / 5);
-    var empty = 20 - filled;
-    var filledStr = new Array(filled + 1).join('█');
-    var emptyStr = new Array(empty + 1).join('░');
-    var speed = (Math.random() * 4 + 1).toFixed(1);
-    bar.textContent = '  [' + filledStr + emptyStr + '] ' + Math.round(pct) + '%  ' + speed + ' MB/s';
-    window.scrollTo(0, document.body.scrollHeight);
-    if (pct >= 100) {
-      clearInterval(interval);
-      state.ascii = name;
-      saveState();
-      print('✓ ' + name + ' descargado correctamente.', 'success');
-    }
-  }, 60);
-};
-
-commands.fields = function() {
-  print('Campos configurables (set <campo> <valor>):', 'dim');
-  Object.keys(state.data).forEach(function(k) { print('  • ' + k); });
-};
-
-commands.set = function(args) {
-  var key = args[0];
-  var value = args.slice(1).join(' ');
-  if (!key || !value) return print('Uso: set <campo> <valor>', 'error');
-  if (!(key in state.data)) return print('Campo "' + key + '" no existe. Usa fields.', 'error');
-  state.data[key] = value;
-  saveState();
-  print('✓ ' + key + ' = ' + value, 'success');
-};
-
-commands.preview = function() {
-  if (!state.ascii) return print('Primero descarga un ASCII: download <nombre>', 'error');
-  renderPreview();
-  print('Previsualización generada abajo ↓', 'dim');
-};
-
-commands.theme = function(args) {
-  if (args.length === 0) {
-    print('Temas configurados:', 'dim');
-    Object.keys(ASCII_ARTS).forEach(function(name) {
-      var pal = getPalette(name);
-      var src = state.customThemes[name] ? 'custom' : (THEMES[name] ? 'default' : 'fallback');
-      print('  • ' + (name + '            ').slice(0, 12) + ' [' + pal.join(', ') + ']  (' + src + ')');
-    });
-    print('', 'dim');
-    print('Cambiar:  theme <ascii> <c1> [c2...]', 'dim');
-    print('Resetear: theme reset <ascii>', 'dim');
-    print('Colores: 30-37 (normal), 90-97 (brillante)', 'dim');
-    return;
-  }
-  if (args[0] === 'reset') {
-    var n = args[1];
-    if (!n || !ASCII_ARTS[n]) return print('Uso: theme reset <ascii>', 'error');
-    delete state.customThemes[n];
-    saveState();
-    print('✓ Tema de ' + n + ' reseteado.', 'success');
-    return;
-  }
-  var name = args[0];
-  var colors = args.slice(1);
-  if (!ASCII_ARTS[name]) return print('ASCII "' + name + '" no existe.', 'error');
-  if (colors.length === 0) return print('Uso: theme <ascii> <c1> [c2...]', 'error');
-  for (var i = 0; i < colors.length; i++) {
-    if (!/^(3[0-7]|9[0-7])$/.test(colors[i])) return print('Color inválido: ' + colors[i] + '. Usa 30-37 o 90-97.', 'error');
-  }
-  state.customThemes[name] = colors;
-  saveState();
-  print('✓ Tema de ' + name + ' actualizado: [' + colors.join(', ') + ']', 'success');
-};
-
-commands.save = function() { saveState(); print('✓ Configuración guardada.', 'success'); };
-
-commands.reset = function() {
-  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
-  state.ascii = null;
-  state.customThemes = {};
-  state.data = {
-    user:'usuario', host:'iPhone', os:'iOS 17.4',
-    kernel:'Darwin 23.4.0', uptime:'2 hours, 15 mins',
-    shell:'zsh 5.9', terminal:'Safari Web Terminal',
-    cpu:'Apple A17 Pro', memory:'8192MiB / 8192MiB'
-  };
-  previewBox.style.display = 'none';
-  print('✓ Configuración borrada.', 'success');
-};
-
-commands.export = function(args) {
-  var type = args[0];
-  if (!state.ascii) return print('Primero descarga un ASCII y haz preview.', 'error');
-  if (['png','txt','pdf'].indexOf(type) === -1) return print('Uso: export png|txt|pdf', 'error');
-  renderPreview();
-  setTimeout(function() {
-    if (type === 'txt') exportTxt();
-    if (type === 'png') exportPng();
-    if (type === 'pdf') exportPdf();
-  }, 100);
-};
-
-commands.clear = function() {
-  output.innerHTML = '';
-  previewBox.style.display = 'none';
-};
-
-// ============================================================
-// EXPORTS
-// ============================================================
-function exportTxt() {
-  var text = buildFastfetchPlainText();
-  downloadBlob(new Blob([text], {type:'text/plain'}), 'fastfetch.txt');
-  print('✓ fastfetch.txt descargado', 'success');
-}
-function exportPng() {
-  if (typeof html2canvas !== 'function') {
-    return print('html2canvas no cargó. Revisa tu conexión.', 'error');
-  }
-  html2canvas(previewBox, { backgroundColor: '#161b22', scale: 2 }).then(function(canvas) {
-    canvas.toBlob(function(blob) {
-      downloadBlob(blob, 'fastfetch.png');
-      print('✓ fastfetch.png descargado', 'success');
-    });
-  }).catch(function(e) {
-    print('Error al generar PNG: ' + e.message, 'error');
-  });
-}
-function exportPdf() {
-  if (!window.jspdf || !window.jspdf.jsPDF) {
-    return print('jsPDF no cargó. Revisa tu conexión.', 'error');
-  }
-  var jsPDF = window.jspdf.jsPDF;
-  var doc = new jsPDF({ unit:'pt', format:'a4' });
-  doc.setFont('courier', 'normal');
-  doc.setFontSize(9);
-  var text = buildFastfetchPlainText();
-  var lines = doc.splitTextToSize(text, 540);
-  doc.text(lines, 30, 40);
-  doc.save('fastfetch.pdf');
-  print('✓ fastfetch.pdf descargado', 'success');
-}
-function downloadBlob(blob, filename) {
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
-}
-
-// ============================================================
-// INPUT HANDLING (robusto para iOS)
-// ============================================================
-function handleCommand(raw) {
-  raw = raw.trim();
-  if (!raw) return;
-  print('fastfetch@safari:~$ ' + raw);
-  var parts = raw.split(/\s+/);
-  var cmd = parts[0];
-  var args = parts.slice(1);
-  if (commands[cmd]) {
-    try { commands[cmd](args); }
-    catch (err) { print('Error: ' + err.message, 'error'); }
-  } else {
-    print('comando no encontrado: ' + cmd + ". Escribe 'help'.", 'error');
-  }
-}
-
-input.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter' || e.keyCode === 13) {
-    e.preventDefault();
-    var val = input.value;
-    input.value = '';
-    handleCommand(val);
-  }
-});
-
-// Tocar la terminal enfoca el input (iOS)
-document.getElementById('terminal').addEventListener('touchstart', function(e) {
-  if (e.target.tagName !== 'INPUT') {
-    setTimeout(function() { input.focus(); }, 50);
-  }
-}, { passive: true });
-document.getElementById('terminal').addEventListener('click', function(e) {
-  if (e.target.tagName !== 'INPUT') input.focus();
-});
-
-// ============================================================
-// INIT
-// ============================================================
-loadState();
-print('fastfetch-web-terminal v0.3', 'success');
-print('Escribe "help" para ver los comandos.', 'dim');
-if (state.ascii) print('(config restaurada: ASCII "' + state.ascii + '")', 'dim');
-print('');
-
-// Enfocar input al cargar
-setTimeout(function() { input.focus(); }, 300);
-
-})();
-</script>
-</body>
-</html>
