@@ -120,8 +120,6 @@ window.onerror = function(msg, url, line, col, err) {
 (function() {
 'use strict';
 
-(function() {
-'use strict';
 
 // ===== BLOQUEO DE ZOOM Y REBOTES EN iOS (NUEVO) =====
 
@@ -160,6 +158,22 @@ document.body.addEventListener('touchmove', function(e) {
     e.preventDefault();
   }
 }, { passive: false });
+
+// 5. Bloquear pull-to-refresh
+var initialY = 0;
+document.addEventListener('touchstart', function(e) {
+  initialY = e.touches[0].clientY;
+}, { passive: true });
+
+document.addEventListener('touchmove', function(e) {
+  var y = e.touches[0].clientY;
+  var term = document.getElementById('terminal');
+  if (term.scrollTop === 0 && y > initialY) {
+    e.preventDefault();
+  }
+}, { passive: false });
+
+
 
 // ===== FIN BLOQUEO =====
 
