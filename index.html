@@ -9,40 +9,88 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-  * { box-sizing: border-box; }
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent; /* NUEVO: quita el flash azul al tocar */
+    -webkit-touch-callout: none;              /* NUEVO: quita el menú al mantener presionado */
+  }
+
   html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: #0d1117; color: #c9d1d9;
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    background: #0d1117;
+    color: #c9d1d9;
     font-family: 'Menlo', 'Courier New', monospace;
     font-size: 13px;
-    -webkit-text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;           /* NUEVO: evita que iOS agrande el texto al rotar */
+    overscroll-behavior: none;                 /* NUEVO: bloquea el "pull to refresh" y rebotes */
+    touch-action: manipulation;                /* NUEVO: desactiva zoom por doble toque */
+    user-select: none;                         /* NUEVO: sin selección accidental */
+    -webkit-user-select: none;
   }
+
   #terminal {
-    padding: 12px; height: 100vh;
-    overflow-y: auto; display: flex; flex-direction: column;
+    padding: 12px;
+    height: 100vh;
+    height: 100dvh;                            /* NUEVO: altura dinámica en iOS (respeta barra Safari) */
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;              /* NUEVO: no propaga el scroll al body */
+    touch-action: pan-y;                       /* NUEVO: solo permite scroll vertical */
   }
-  #output { white-space: pre-wrap; word-break: break-word; flex: 1; }
+
+  #output {
+    white-space: pre-wrap;
+    word-break: break-word;
+    flex: 1;
+    user-select: text;                         /* NUEVO: deja seleccionar texto de la consola */
+    -webkit-user-select: text;
+  }
+
   .line { white-space: pre-wrap; }
-  .error { color: #f85149; }
+  .error   { color: #f85149; }
   .success { color: #3fb950; }
-  .dim { color: #8b949e; }
-  .warn { color: #d29922; }
-  .progress { color: #58a6ff; }
+  .dim     { color: #8b949e; }
+  .warn    { color: #d29922; }
+  .progress{ color: #58a6ff; }
+
   .input-line { display: flex; align-items: center; }
+
   .input-line span { color: #58a6ff; margin-right: 6px; }
+
   #cmdInput {
-    background: transparent; border: none; outline: none;
-    color: #c9d1d9; font-family: inherit; font-size: inherit;
-    flex: 1; caret-color: #58a6ff; min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #c9d1d9;
+    font-family: inherit;
+    font-size: 16px;                           /* NUEVO: 16px evita zoom automático de iOS al enfocar */
+    flex: 1;
+    caret-color: #58a6ff;
+    min-width: 0;
+    user-select: text;
+    -webkit-user-select: text;
   }
+
   #preview-box {
-    display: none; background: #161b22; border: 1px solid #30363d;
-    border-radius: 6px; padding: 14px; margin: 8px 0;
-    font-size: 11px; line-height: 1.15; overflow-x: auto;
+    display: none;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 14px;
+    margin: 8px 0;
+    font-size: 11px;
+    line-height: 1.15;
+    overflow-x: auto;
+    overscroll-behavior: contain;
   }
+
   .ff-line { display: flex; }
-  .ff-art { white-space: pre; flex-shrink: 0; }
+  .ff-art  { white-space: pre; flex-shrink: 0; }
   .ff-info { white-space: pre; }
 </style>
 </head>
