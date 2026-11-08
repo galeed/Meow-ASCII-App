@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>fastfetch-web-terminal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0d1117;
+    color: #c9d1d9;
+    font-family: 'Menlo', 'Courier New', monospace;
+    font-size: 13px;
+  }
+  #terminal {
+    padding: 12px;
+    height: 100vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  #output { white-space: pre-wrap; word-break: break-word; flex: 1; }
+  .line { white-space: pre-wrap; }
+  .prompt { color: #58a6ff; }
+  .error { color: #f85149; }
+  .success { color: #3fb950; }
+  .dim { color: #8b949e; }
+  .input-line { display: flex; align-items: center; }
+  .input-line span { color: #58a6ff; margin-right: 6px; }
+  #cmdInput {
+    background: transparent; border: none; outline: none;
+    color: #c9d1d9; font-family: inherit; font-size: inherit;
+    flex: 1; caret-color: #58a6ff;
+  }
+  #preview-box {
+    display: none;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 12px;
+    margin: 8px 0;
+    white-space: pre;
+    font-size: 10px;
+    line-height: 1.1;
+    overflow-x: auto;
+  }
+</style>
+</head>
+<body>
+<div id="terminal">
+  <div id="output"></div>
+  <div id="preview-box"></div>
+  <div class="input-line">
+    <span>fastfetch@safari:~$</span>
+    <input id="cmdInput" autocomplete="off" autocapitalize="off" spellcheck="false" autofocus>
+  </div>
+</div>
+
+<script>
+// ---------- ASCII ARTS (puedes añadir más) ----------
+const ASCII_ARTS = {
+  arch: `                   -\`
+                  .o+\`
+                 \`ooo/
+                \`+oooo:
+               \`+oooooo:
+               -+oooooo+:
+             \`/:-:++oooo+:
+            \`/++++/+++++++:
+           \`/++++++++++++++:
+          \`/+++ooooooooooooo/\`
+         ./ooosssso++osssssso+\`
+        .oossssso-\`\`\`\`/ossssss+\`
+       -osssssso.      :ssssssso.
+      :osssssss/        osssso+++.
+     /ossssssss/        +ssssooo/-
+   \`/ossssso+/:-        -:/+osssso+-
+  \`+sso+:-\`                 \`.-/+oso:
+ \`++:.                           \`-/+/
+ .\`                                 \`/`,
+  apple: `                    'c.
+                 ,xNMM.
+               .OMMMMo
+               OMMM0,
+     .;loddo:' loolloddol;.
+   cKMMMMMMMMMMNWMMMMMMMMMM0:
+ .KMMMMMMMMMMMMMMMMMMMMMMMWd.
+ XMMMMMMMMMMMMMMMMMMMMMMMX.
+;MMMMMMMMMMMMMMMMMMMMMMMM:
+:MMMMMMMMMMMMMMMMMMMMMMMM:
+.MMMMMMMMMMMMMMMMMMMMMMMMX.
+ kMMMMMMMMMMMMMMMMMMMMMMMMWd.
+ .XMMMMMMMMMMMMMMMMMMMMMMMMMMk
+  .XMMMMMMMMMMMMMMMMMMMMMMMMK.
+    kMMMMMMMMMMMMMMMMMMMMMMd
+     ;KMMMMMMMWXXWMMMMMMMk.
+       .cooc,.    .,coo:.`,
+  tux: `        .--.
+       |o_o |
+       |:_/ |
+      //   \\ \\
+     (|     | )
+    /'\\_   _/\`\\
+    \\___)=(___/`
+};
+
+// ---------- ESTADO ----------
+const state = {
+  ascii: null,        // nombre del ASCII "descargado"
+  data: {             // datos por defecto
+    user: 'usuario',
+    host: 'iPhone',
+    os: 'iOS 17.4',
+    kernel: 'Darwin 23.4.0',
+    uptime: '2 hours, 15 mins',
+    shell: 'zsh 5.9',
+    terminal: 'Safari Web Terminal',
+    cpu: 'Apple A17 Pro',
+    memory: '8192MiB / 8192MiB'
+  }
+};
+
+const output = document.getElementById('output');
+const input = document.getElementById('cmdInput');
+const previewBox = document.getElementById('preview-box');
+
+function print(text, cls = '') {
+  const div = document.createElement('div');
+  div.className = 'line ' + cls;
+  div.textContent = text;
+  output.appendChild(div);
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+function printHTML(html, cls = '') {
+  const div = document.createElement('div');
+  div.className = 'line ' + cls;
+  div.innerHTML = html;
+  output.appendChild(div);
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+// ---------- COMANDOS ----------
+const commands = {
+  help() {
+    print('Comandos disponibles:', 'dim');
+    print('  help                  - Muestra esta ayuda');
+    print('  list-ascii            - Lista los ASCII disponibles');
+    print('  download <nombre>     - "Descarga" un ASCII');
+    print('  set <campo> <valor>   - Configura un dato');
+    print('  fields                - Lista los campos configurables');
+    print('  preview               - Previsualiza el resultado');
+    print('  export png|txt|pdf    - Exporta el resultado');
+    print('  clear                 - Limpia la terminal');
+  },
+
+  'list-ascii'() {
+    print('ASCII disponibles en el repositorio (simulado):', 'dim');
+    Object.keys(ASCII_ARTS).forEach(k => print('  • ' + k));
+    print('Usa: download <nombre>', 'dim');
+  },
+
+  download(args) {
+    const name = args[0];
+    if (!name) return print('Uso: download <nombre>', 'error');
+    if (!ASCII_ARTS[name]) return print(`ASCII "${name}" no encontrado. Prueba list-ascii.`, 'error');
+    print(`Descargando ${name}...`);
+    setTimeout(() => {
+      state.ascii = name;
+      print(`✓ ${name} descargado correctamente.`, 'success');
+    }, 400);
+  },
+
+  fields() {
+    print('Campos configurables (set <campo> <valor>):', 'dim');
+    Object.keys(state.data).forEach(k => print('  • ' + k));
+  },
+
+  set(args) {
+    const [key, ...rest] = args;
+    const value = rest.join(' ');
+    if (!key || !value) return print('Uso: set <campo> <valor>', 'error');
+    if (!(key in state.data)) return print(`Campo "${key}" no existe. Usa fields.`, 'error');
+    state.data[key] = value;
+    print(`✓ ${key} = ${value}`, 'success');
+  },
+
+  preview() {
+    if (!state.ascii) return print('Primero descarga un ASCII: download <nombre>', 'error');
+    renderPreview();
+    print('Previsualización generada abajo ↓', 'dim');
+  },
+
+  async export(args) {
+    const type = args[0];
+    if (!state.ascii) return print('Primero descarga un ASCII y haz preview.', 'error');
+    if (!['png','txt','pdf'].includes(type)) return print('Uso: export png|txt|pdf', 'error');
+
+    renderPreview();
+    await new Promise(r => setTimeout(r, 100));
+
+    if (type === 'txt') return exportTxt();
+    if (type === 'png') return exportPng();
+    if (type === 'pdf') return exportPdf();
+  },
+
+  clear() {
+    output.innerHTML = '';
+    previewBox.style.display = 'none';
+  }
+};
+
+// ---------- RENDER ----------
+function buildFastfetchText() {
+  const d = state.data;
+  const art = ASCII_ARTS[state.ascii];
+  const artLines = art.split('\n');
+  const infoLines = [
+    `${d.user}@${d.host}`,
+    '-------------------',
+    `OS: ${d.os}`,
+    `Host: ${d.host}`,
+    `Kernel: ${d.kernel}`,
+    `Uptime: ${d.uptime}`,
+    `Shell: ${d.shell}`,
+    `Terminal: ${d.terminal}`,
+    `CPU: ${d.cpu}`,
+    `Memory: ${d.memory}`
+  ];
+  const maxLines = Math.max(artLines.length, infoLines.length);
+  const artWidth = Math.max(...artLines.map(l => l.length));
+  let out = '';
+  for (let i = 0; i < maxLines; i++) {
+    const a = (artLines[i] || '').padEnd(artWidth, ' ');
+    const b = infoLines[i] || '';
+    out += a + '   ' + b + '\n';
+  }
+  return out;
+}
+
+function renderPreview() {
+  previewBox.textContent = buildFastfetchText();
+  previewBox.style.display = 'block';
+}
+
+// ---------- EXPORTS ----------
+function exportTxt() {
+  const text = buildFastfetchText();
+  const blob = new Blob([text], { type: 'text/plain' });
+  downloadBlob(blob, 'fastfetch.txt');
+  print('✓ fastfetch.txt descargado', 'success');
+}
+
+async function exportPng() {
+  const canvas = await html2canvas(previewBox, {
+    backgroundColor: '#161b22',
+    scale: 2
+  });
+  canvas.toBlob(blob => {
+    downloadBlob(blob, 'fastfetch.png');
+    print('✓ fastfetch.png descargado', 'success');
+  });
+}
+
+function exportPdf() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(9);
+  const text = buildFastfetchText();
+  const lines = doc.splitTextToSize(text, 540);
+  doc.text(lines, 30, 40);
+  doc.save('fastfetch.pdf');
+  print('✓ fastfetch.pdf descargado', 'success');
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ---------- INPUT HANDLING ----------
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const raw = input.value.trim();
+    input.value = '';
+    if (!raw) return;
+
+    print(`fastfetch@safari:~$ ${raw}`);
+    const [cmd, ...args] = raw.split(/\s+/);
+    if (commands[cmd]) {
+      try { commands[cmd](args); }
+      catch (err) { print('Error: ' + err.message, 'error'); }
+    } else {
+      print(`comando no encontrado: ${cmd}. Escribe 'help'.`, 'error');
+    }
+  }
+});
+
+// Enfocar input al tocar la terminal (iOS)
+document.getElementById('terminal').addEventListener('click', () => input.focus());
+
+// Banner inicial
+print('fastfetch-web-terminal v0.1', 'success');
+print('Escribe "help" para ver los comandos.', 'dim');
+print('');
+</script>
+</body>
+</html>
