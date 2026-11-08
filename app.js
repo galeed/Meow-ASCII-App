@@ -26,25 +26,25 @@ $2       .oossssso-\`\`\`\`/ossssss+\`
  .\`                                 \`/`,
 
   ubuntu: `                             ....
-              $2.',:clooo:  $1.:looooo:.
-           $2.;looooooooc  $1.oooooooooo'
-        $2.;looooool:,''.  $1:ooooooooooc
-       $2;looool;.         $1'oooooooooo,
-      $2;clool'             $1.cooooooc.  $2,,
-         $2...                $1......  $2.:oo,
-  $1.;clol:,.                        $2.loooo'
- $1:ooooooooo,                        $2'ooool
-$1'ooooooooooo.                        $2loooo.
-$1'ooooooooool                         $2coooo.
- $1,loooooooc.                        $2.loooo.
-   $1.,;;;'.                          $2;ooooc
-       $2...                         $2,ooool.
-    $2.cooooc.              $1..',,'.  $2.cooo.
-      $2;ooooo:.           $1;oooooooc.  $2:l.
-       $2.coooooc,..      $1coooooooooo.
-         $2.:ooooooolc:. $1.ooooooooooo'
-           $2.':loooooo;  $1,oooooooooc
-               $2..';::c'  $1.;loooo:'`,
+              $1.',:clooo:  $2.:looooo:.
+           $1.;looooooooc  $2.oooooooooo'
+        $1.;looooool:,''.  $2:ooooooooooc
+       $1;looool;.         $2'oooooooooo,
+      $1;clool'             $2.cooooooc.  $1,,
+         $1...                $2......  $1.:oo,
+  $2.;clol:,.                        $1.loooo'
+ $2:ooooooooo,                        $1'ooool
+$2'ooooooooooo.                        $1loooo.
+$2'ooooooooool                         $1coooo.
+ $2,loooooooc.                        $1.loooo.
+   $2.,;;;'.                          $1;ooooc
+       $1...                         $1,ooool.
+    $1.cooooc.              $2..',,'.  $1.cooo.
+      $1;ooooo:.           $2;oooooooc.  $1:l.
+       $1.coooooc,..      $2coooooooooo.
+         $1.:ooooooolc:. $2.ooooooooooo'
+           $1.':loooooo;  $2,oooooooooc
+               $1..';::c'  $2.;loooo:'`,
 
   debian: `        $2_,met$$$$$$$$$$gg.
      ,g$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$P.
