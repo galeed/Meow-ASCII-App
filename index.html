@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d1117">
 <title>fastfetch-web-terminal</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -46,8 +47,10 @@
   .dim { color: #8b949e; }
   .warn { color: #d29922; }
   .progress { color: #58a6ff; }
+  
   .input-line { display: flex; align-items: center; }
   .input-line span { color: #58a6ff; margin-right: 6px; flex-shrink: 0; }
+  
   #cmdInput {
     background: transparent; border: none; outline: none;
     color: #c9d1d9; font-family: inherit;
@@ -55,6 +58,18 @@
     flex: 1; caret-color: #58a6ff; min-width: 0;
     user-select: text; -webkit-user-select: text;
   }
+
+  .hist-btns {
+    display: flex; flex-direction: column; gap: 2px; margin-left: 8px;
+  }
+  .hist-btns button {
+    background: #161b22; border: 1px solid #30363d; color: #8b949e;
+    border-radius: 4px; width: 24px; height: 20px; font-size: 10px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0; outline: none;
+  }
+  .hist-btns button:active { background: #30363d; color: #c9d1d9; }
+
   #preview-box {
     display: none; background: #161b22; border: 1px solid #30363d;
     border-radius: 6px; padding: 14px; margin: 8px 0;
@@ -73,6 +88,10 @@
   <div class="input-line">
     <span>fastfetch@safari:~$</span>
     <input id="cmdInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" autofocus>
+    <div class="hist-btns">
+      <button id="btnUp" tabindex="-1">↑</button>
+      <button id="btnDown" tabindex="-1">↓</button>
+    </div>
   </div>
 </div>
 
@@ -95,18 +114,39 @@ window.onerror = function(msg, url, line, col, err) {
 document.addEventListener('gesturestart', function(e) { e.preventDefault(); }, { passive: false });
 document.addEventListener('gesturechange', function(e) { e.preventDefault(); }, { passive: false });
 document.addEventListener('gestureend', function(e) { e.preventDefault(); }, { passive: false });
-
 var lastTouchEnd = 0;
 document.addEventListener('touchend', function(e) {
   var now = Date.now();
   if (now - lastTouchEnd <= 300) e.preventDefault();
   lastTouchEnd = now;
 }, { passive: false });
-
-document.addEventListener('wheel', function(e) {
-  if (e.ctrlKey) e.preventDefault();
-}, { passive: false });
+document.addEventListener('wheel', function(e) { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
 // ===== FIN BLOQUEO =====
+
+// ============================================================
+// PWA MANIFEST DINÁMICO
+// ============================================================
+(function() {
+  var manifest = {
+    "name": "Fastfetch Web Terminal",
+    "short_name": "Fastfetch",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#0d1117",
+    "theme_color": "#0d1117",
+    "icons": [{
+      "src": "icon.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }]
+  };
+  var blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+  var link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = URL.createObjectURL(blob);
+  document.head.appendChild(link);
+})();
 
 // ============================================================
 // ASCII ARTS
@@ -324,23 +364,26 @@ var INFO_STYLE = { user:'#8ae234', at:'#d3d7cf', sep:'#555753', label:'#729fcf',
 // ============================================================
 // ESTADO Y PERSISTENCIA
 // ============================================================
-var STORAGE_KEY = 'fastfetch-web-v04';
+var STORAGE_KEY = 'fastfetch-web-v1';
 var state = {
   ascii: null,
-  installed: [], // Lista de ascii "instalados" con sudo meow add
+  installed: [],
+  presets: {}, // NUEVO: para guardar configuraciones
   data: {
     user:'usuario', host:'iPhone', os:'iOS 17.4',
     kernel:'Darwin 23.4.0', uptime:'2 hours, 15 mins',
     shell:'zsh 5.9', terminal:'Safari Web Terminal',
     cpu:'Apple A17 Pro', memory:'8192MiB / 8192MiB'
   },
-  customThemes: {}
+  customThemes: {},
+  typewriter: true // NUEVO: config para el efecto typewriter
 };
 
 function saveState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      ascii: state.ascii, installed: state.installed, data: state.data, customThemes: state.customThemes
+      ascii: state.ascii, installed: state.installed, presets: state.presets,
+      data: state.data, customThemes: state.customThemes, typewriter: state.typewriter
     }));
   } catch(e) {}
 }
@@ -351,8 +394,10 @@ function loadState() {
     var p = JSON.parse(raw);
     if (p.ascii && ASCII_ARTS[p.ascii]) state.ascii = p.ascii;
     if (p.installed) state.installed = p.installed;
+    if (p.presets) state.presets = p.presets;
     if (p.data) Object.assign(state.data, p.data);
     if (p.customThemes) state.customThemes = p.customThemes;
+    if (p.typewriter !== undefined) state.typewriter = p.typewriter;
   } catch(e) {}
 }
 
@@ -362,6 +407,8 @@ function loadState() {
 var output = document.getElementById('output');
 var input = document.getElementById('cmdInput');
 var previewBox = document.getElementById('preview-box');
+var history = [];
+var histIndex = -1;
 
 function print(text, cls) {
   var div = document.createElement('div');
@@ -373,6 +420,75 @@ function print(text, cls) {
 
 function escapeHTML(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// NUEVO: Efecto Typewriter
+function typewriterPrint(html, cls, callback) {
+  if (!state.typewriter || !html) {
+    var div = document.createElement('div');
+    div.className = 'line ' + (cls || '');
+    div.innerHTML = html;
+    output.appendChild(div);
+    window.scrollTo(0, document.body.scrollHeight);
+    if (callback) callback();
+    return;
+  }
+
+  var div = document.createElement('div');
+  div.className = 'line ' + (cls || '');
+  output.appendChild(div);
+  
+  // Parsear el HTML para animar por nodos de texto
+  var temp = document.createElement('div');
+  temp.innerHTML = html;
+  var nodes = Array.from(temp.childNodes);
+  var nodeIndex = 0;
+  var charIndex = 0;
+  
+  function processNextNode() {
+    if (nodeIndex >= nodes.length) {
+      if (callback) callback();
+      return;
+    }
+    var node = nodes[nodeIndex];
+    if (node.nodeType === 3) { // Text node
+      if (charIndex < node.textContent.length) {
+        div.appendChild(document.createTextNode(node.textContent[charIndex]));
+        charIndex++;
+        window.scrollTo(0, document.body.scrollHeight);
+        setTimeout(processNextNode, 1); // velocidad
+      } else {
+        nodeIndex++;
+        charIndex = 0;
+        processNextNode();
+      }
+    } else { // Element node (span)
+      var clone = node.cloneNode(false);
+      div.appendChild(clone);
+      // Animamos el texto dentro del span recursivamente
+      var spanText = node.textContent;
+      if (spanText.length > 0) {
+        var spanChar = 0;
+        function processSpan() {
+          if (spanChar < spanText.length) {
+            clone.textContent += spanText[spanChar];
+            spanChar++;
+            window.scrollTo(0, document.body.scrollHeight);
+            setTimeout(processSpan, 1);
+          } else {
+            nodeIndex++;
+            charIndex = 0;
+            processNextNode();
+          }
+        }
+        processSpan();
+      } else {
+        nodeIndex++;
+        processNextNode();
+      }
+    }
+  }
+  processNextNode();
 }
 
 // ============================================================
@@ -397,11 +513,9 @@ function infoLine(label, value) {
          '<span style="color:' + INFO_STYLE.value + '">: ' + escapeHTML(value) + '</span>';
 }
 
-function buildFastfetchHTML() {
+function getInfoLines() {
   var d = state.data;
-  var artLines = ASCII_ARTS[state.ascii].split('\n');
-  var palette = getPalette(state.ascii);
-  var infoLines = [
+  return [
     '<span style="color:' + INFO_STYLE.user + '">' + escapeHTML(d.user) + '</span>' +
     '<span style="color:' + INFO_STYLE.at + '">@</span>' +
     '<span style="color:' + INFO_STYLE.user + '">' + escapeHTML(d.host) + '</span>',
@@ -410,6 +524,12 @@ function buildFastfetchHTML() {
     infoLine('Uptime', d.uptime), infoLine('Shell', d.shell), infoLine('Terminal', d.terminal),
     infoLine('CPU', d.cpu), infoLine('Memory', d.memory)
   ];
+}
+
+function buildFastfetchHTML(asciiName) {
+  var artLines = ASCII_ARTS[asciiName].split('\n');
+  var palette = getPalette(asciiName);
+  var infoLines = getInfoLines();
   var maxLines = Math.max(artLines.length, infoLines.length);
   var artWidth = 0;
   for (var i = 0; i < artLines.length; i++) {
@@ -450,7 +570,7 @@ function buildFastfetchPlainText() {
 }
 
 function renderPreview() {
-  previewBox.innerHTML = buildFastfetchHTML();
+  previewBox.innerHTML = buildFastfetchHTML(state.ascii);
   previewBox.style.display = 'block';
 }
 
@@ -463,17 +583,23 @@ commands.help = function() {
   print('Comandos disponibles:', 'dim');
   print('  help                                  - Muestra esta ayuda');
   print('  list-ascii                            - Lista los ASCII del repositorio');
-  print('  sudo meow list                        - Lista ASCII instalados en tu sesión');
-  print('  sudo meow add <nombre>                - Instala/descarga un ASCII');
+  print('  fastfetch | neofetch                  - Muestra el logo y datos en consola');
+  print('  ascii <nombre>                        - Imprime solo el logo (sin instalarlo)');
+  print('  sudo meow add <nombre|random>         - Instala/descarga un ASCII');
   print('  sudo meow gen <txt|png|pdf>           - Genera y exporta el archivo');
+  print('  sudo meow list                        - Lista ASCII instalados');
   print('  sudo meow status                      - Muestra el ASCII actual');
+  print('  sudo meow save <nombre>               - Guarda preset actual');
+  print('  sudo meow load <nombre>               - Carga preset');
+  print('  sudo meow presets                     - Lista presets guardados');
   print('  set <campo> <valor>                   - Configura un dato');
   print('  fields                                - Lista los campos configurables');
-  print('  preview                               - Previsualiza el resultado');
+  print('  preview                               - Previsualiza el resultado en recuadro');
+  print('  share <png|txt>                       - Comparte vía Web Share API (iOS)');
   print('  theme                                 - Ver temas configurados');
   print('  theme <ascii> <c1> [c2...]            - Cambiar paleta de un ASCII');
   print('  theme reset <ascii>                   - Resetear paleta de un ASCII');
-  print('  save                                  - Guardar config');
+  print('  settings typewriter <on|off>          - Activa/desactiva el efecto typewriter');
   print('  reset                                 - Borrar config guardada');
   print('  clear                                 - Limpia la terminal');
 };
@@ -499,10 +625,57 @@ commands.set = function(args) {
   print('✓ ' + key + ' = ' + value, 'success');
 };
 
+commands.fastfetch = function() {
+  if (!state.ascii) return print('No hay ASCII cargado. Usa: sudo meow add <nombre>', 'error');
+  print(''); // separador
+  var html = buildFastfetchHTML(state.ascii);
+  typewriterPrint(html);
+};
+commands.neofetch = commands.fastfetch; // Alias
+
+commands.ascii = function(args) {
+  var name = args[0];
+  if (!name || !ASCII_ARTS[name]) return print('Uso: ascii <nombre>. Prueba list-ascii.', 'error');
+  print(''); // separador
+  var palette = getPalette(name);
+  var artLines = ASCII_ARTS[name].split('\n');
+  var html = '';
+  artLines.forEach(function(line) {
+    html += '<div class="ff-line"><span class="ff-art">' + colorizeLogo(line, palette) + '</span></div>';
+  });
+  typewriterPrint(html);
+};
+
 commands.preview = function() {
   if (!state.ascii) return print('Primero instala un ASCII: sudo meow add <nombre>', 'error');
   renderPreview();
   print('Previsualización generada abajo ↓', 'dim');
+};
+
+commands.share = function(args) {
+  var type = args[0];
+  if (!state.ascii) return print('No hay ASCII cargado.', 'error');
+  if (!navigator.share) return print('Web Share API no soportada en este navegador.', 'warn');
+
+  if (type === 'txt') {
+    var text = buildFastfetchPlainText();
+    navigator.share({ title: 'fastfetch', text: text }).catch(function(){});
+  } else if (type === 'png') {
+    renderPreview();
+    if (typeof html2canvas !== 'function') return print('Librería PNG no cargada.', 'error');
+    html2canvas(previewBox, { backgroundColor: '#161b22', scale: 2 }).then(function(canvas) {
+      canvas.toBlob(function(blob) {
+        var file = new File([blob], 'fastfetch.png', { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file], title: 'fastfetch' }).catch(function(){});
+        } else {
+          print('Tu navegador no soporta compartir archivos. Usa: sudo meow gen png', 'warn');
+        }
+      });
+    });
+  } else {
+    print('Uso: share <png|txt>', 'error');
+  }
 };
 
 commands.theme = function(args) {
@@ -516,7 +689,6 @@ commands.theme = function(args) {
     print('', 'dim');
     print('Cambiar:  theme <ascii> <c1> [c2...]', 'dim');
     print('Resetear: theme reset <ascii>', 'dim');
-    print('Colores: 30-37 (normal), 90-97 (brillante)', 'dim');
     return;
   }
   if (args[0] === 'reset') {
@@ -532,19 +704,28 @@ commands.theme = function(args) {
   if (!ASCII_ARTS[name]) return print('ASCII "' + name + '" no existe.', 'error');
   if (colors.length === 0) return print('Uso: theme <ascii> <c1> [c2...]', 'error');
   for (var i = 0; i < colors.length; i++) {
-    if (!/^(3[0-7]|9[0-7])$/.test(colors[i])) return print('Color inválido: ' + colors[i] + '. Usa 30-37 o 90-97.', 'error');
+    if (!/^(3[0-7]|9[0-7])$/.test(colors[i])) return print('Color inválido: ' + colors[i], 'error');
   }
   state.customThemes[name] = colors;
   saveState();
   print('✓ Tema de ' + name + ' actualizado: [' + colors.join(', ') + ']', 'success');
 };
 
-commands.save = function() { saveState(); print('✓ Configuración guardada.', 'success'); };
+commands.settings = function(args) {
+  if (args[0] === 'typewriter' && args[1]) {
+    state.typewriter = (args[1] === 'on');
+    saveState();
+    print('✓ Efecto typewriter ' + (state.typewriter ? 'activado' : 'desactivado') + '.', 'success');
+    return;
+  }
+  print('Uso: settings typewriter <on|off>', 'dim');
+};
 
 commands.reset = function() {
   try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
   state.ascii = null;
   state.installed = [];
+  state.presets = {};
   state.customThemes = {};
   state.data = {
     user:'usuario', host:'iPhone', os:'iOS 17.4', kernel:'Darwin 23.4.0',
@@ -560,11 +741,40 @@ commands.clear = function() {
   previewBox.style.display = 'none';
 };
 
+commands.matrix = function() {
+  print('Wake up, Neo...', 'success');
+  var chars = '01ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*';
+  var interval = setInterval(function() {
+    var str = '';
+    for (var i = 0; i < 50; i++) {
+      str += chars[Math.floor(Math.random() * chars.length)];
+    }
+    print(str, 'success');
+  }, 50);
+  setTimeout(function() { clearInterval(interval); print('El sistema te ha liberado.', 'dim'); }, 1500);
+};
+
+commands.cowsay = function(args) {
+  var text = args.join(' ') || 'Muuuu';
+  var border = ' ' + new Array(text.length + 3).join('-') + ' ';
+  print(' ' + new Array(text.length + 3).join('-'));
+  print('< ' + text + ' >');
+  print(' ' + new Array(text.length + 3).join('-'));
+  print('        \\   ^__^');
+  print('         \\  (oo)\\_______');
+  print('            (__)\\       )\\/\\');
+  print('                ||----w |');
+  print('                ||     ||');
+};
+
 // ============================================================
 // EL COMANDO MAESTRO: sudo
 // ============================================================
 commands.sudo = function(args) {
-  // Validar que sea sudo meow
+  if (args[0] === 'rm' && args[1] === '-rf' && args[2] === '/') {
+    return print('Nice try 😏 Pero este sistema es a prueba de balas.', 'warn');
+  }
+
   if (args[0] !== 'meow') {
     return print('sudo: comando no permitido. Usa "sudo meow <acción>".', 'error');
   }
@@ -573,19 +783,24 @@ commands.sudo = function(args) {
   var rest = args.slice(2);
 
   if (!action) {
-    print('Uso: sudo meow <acción> [args]', 'dim');
-    print('Acciones: add, gen, list, status', 'dim');
+    print('¿Meow? 🐱 Usa: sudo meow <acción> [args]', 'warn');
+    print('Acciones: add, gen, list, status, save, load, presets', 'dim');
     return;
   }
 
-  // --- sudo meow add <nombre> ---
   if (action === 'add') {
     var name = rest[0];
-    if (!name) return print('Uso: sudo meow add <nombre>', 'error');
+    if (!name) return print('Uso: sudo meow add <nombre|random>', 'error');
+    
+    if (name === 'random') {
+      var keys = Object.keys(ASCII_ARTS);
+      name = keys[Math.floor(Math.random() * keys.length)];
+      print('¡Aleatorio elegido: ' + name + '!', 'success');
+    }
+    
     if (!ASCII_ARTS[name]) return print('ASCII "' + name + '" no existe. Prueba list-ascii.', 'error');
 
     print('[sudo] password for usuario: ********', 'dim');
-    print('Conectando al repositorio remoto...', 'dim');
     print('Descargando ' + name + '...');
 
     var bar = document.createElement('div');
@@ -594,7 +809,7 @@ commands.sudo = function(args) {
 
     var pct = 0;
     var interval = setInterval(function() {
-      pct += 4;
+      pct += 10;
       if (pct > 100) pct = 100;
       var filled = Math.round(pct / 5);
       var empty = 20 - filled;
@@ -608,11 +823,10 @@ commands.sudo = function(args) {
         saveState();
         print('✓ ' + name + ' instalado y cargado en la sesión.', 'success');
       }
-    }, 60);
+    }, 40);
     return;
   }
 
-  // --- sudo meow list ---
   if (action === 'list') {
     if (state.installed.length === 0) return print('No hay ASCII instalados. Usa: sudo meow add <nombre>', 'warn');
     print('ASCII instalados:', 'dim');
@@ -623,7 +837,6 @@ commands.sudo = function(args) {
     return;
   }
 
-  // --- sudo meow status ---
   if (action === 'status') {
     if (!state.ascii) return print('Ningún ASCII cargado actualmente.', 'warn');
     print('ASCII activo: ' + state.ascii, 'success');
@@ -631,12 +844,11 @@ commands.sudo = function(args) {
     return;
   }
 
-  // --- sudo meow gen <formato> ---
   if (action === 'gen') {
     var type = rest[0];
     if (!type) return print('Uso: sudo meow gen <txt|png|pdf>', 'error');
-    if (['png','txt','pdf'].indexOf(type) === -1) return print('Formato no válido. Usa: txt, png o pdf.', 'error');
-    if (!state.ascii) return print('No hay ASCII cargado. Usa: sudo meow add <nombre>', 'error');
+    if (['png','txt','pdf'].indexOf(type) === -1) return print('Formato no válido.', 'error');
+    if (!state.ascii) return print('No hay ASCII cargado.', 'error');
 
     print('[sudo] Generando archivo ' + type.toUpperCase() + '...', 'dim');
     renderPreview();
@@ -645,12 +857,49 @@ commands.sudo = function(args) {
       if (type === 'txt') exportTxt();
       if (type === 'png') exportPng();
       if (type === 'pdf') exportPdf();
-    }, 300); // Pequeño delay para que el usuario vea el mensaje
+    }, 300);
+    return;
+  }
+
+  if (action === 'save') {
+    var presetName = rest[0];
+    if (!presetName) return print('Uso: sudo meow save <nombre>', 'error');
+    state.presets[presetName] = {
+      ascii: state.ascii,
+      data: JSON.parse(JSON.stringify(state.data)),
+      customThemes: JSON.parse(JSON.stringify(state.customThemes))
+    };
+    saveState();
+    print('✓ Preset "' + presetName + '" guardado.', 'success');
+    return;
+  }
+
+  if (action === 'load') {
+    var presetName = rest[0];
+    if (!presetName) return print('Uso: sudo meow load <nombre>', 'error');
+    if (!state.presets[presetName]) return print('Preset "' + presetName + '" no encontrado.', 'error');
+    
+    var p = state.presets[presetName];
+    state.ascii = p.ascii;
+    Object.assign(state.data, p.data);
+    state.customThemes = p.customThemes;
+    saveState();
+    print('✓ Preset "' + presetName + '" cargado (ASCII: ' + p.ascii + ').', 'success');
+    return;
+  }
+
+  if (action === 'presets') {
+    var keys = Object.keys(state.presets);
+    if (keys.length === 0) return print('No hay presets guardados. Usa: sudo meow save <nombre>', 'warn');
+    print('Presets guardados:', 'dim');
+    keys.forEach(function(k) {
+      print('  • ' + k + ' (ASCII: ' + state.presets[k].ascii + ')');
+    });
     return;
   }
 
   print('sudo meow: acción "' + action + '" no reconocida.', 'error');
-  print('Acciones válidas: add, gen, list, status', 'dim');
+  print('Acciones válidas: add, gen, list, status, save, load, presets', 'dim');
 };
 
 // ============================================================
@@ -659,14 +908,14 @@ commands.sudo = function(args) {
 function exportTxt() {
   var text = buildFastfetchPlainText();
   downloadBlob(new Blob([text], {type:'text/plain'}), 'fastfetch.txt');
-  print('✓ Archivo fastfetch.txt guardado en Descargas.', 'success');
+  print('✓ Archivo fastfetch.txt guardado.', 'success');
 }
 function exportPng() {
   if (typeof html2canvas !== 'function') return print('Error: librería PNG no cargada.', 'error');
   html2canvas(previewBox, { backgroundColor: '#161b22', scale: 2 }).then(function(canvas) {
     canvas.toBlob(function(blob) {
       downloadBlob(blob, 'fastfetch.png');
-      print('✓ Archivo fastfetch.png guardado en Fotos/Descargas.', 'success');
+      print('✓ Archivo fastfetch.png guardado.', 'success');
     });
   }).catch(function(e) {
     print('Error al generar PNG: ' + e.message, 'error');
@@ -681,7 +930,7 @@ function exportPdf() {
   var lines = doc.splitTextToSize(text, 540);
   doc.text(lines, 30, 40);
   doc.save('fastfetch.pdf');
-  print('✓ Archivo fastfetch.pdf guardado en Descargas.', 'success');
+  print('✓ Archivo fastfetch.pdf guardado.', 'success');
 }
 function downloadBlob(blob, filename) {
   var url = URL.createObjectURL(blob);
@@ -694,8 +943,118 @@ function downloadBlob(blob, filename) {
 }
 
 // ============================================================
-// INPUT HANDLING
+// INPUT HANDLING & AUTOCOMPLETADO
 // ============================================================
+
+// NUEVO: Lógica de autocompletado
+function autocomplete() {
+  var val = input.value;
+  var parts = val.split(/\s+/);
+  
+  // Autocompletado para "sud" -> "sudo"
+  if (parts.length === 1) {
+    var cmds = Object.keys(commands);
+    var matches = cmds.filter(function(c) { return c.indexOf(parts[0]) === 0; });
+    if (matches.length === 1) {
+      input.value = matches[0] + ' ';
+    }
+    return;
+  }
+
+  // Autocompletado para "sudo meow " -> acciones
+  if (parts[0] === 'sudo' && parts[1] === 'meow' && parts.length <= 3) {
+    var actions = ['add', 'gen', 'list', 'status', 'save', 'load', 'presets'];
+    if (parts.length === 3 && parts[2] !== '') {
+      var matches = actions.filter(function(a) { return a.indexOf(parts[2]) === 0; });
+      if (matches.length === 1) input.value = 'sudo meow ' + matches[0] + ' ';
+    } else if (parts.length === 2 || parts[2] === '') {
+      print('Acciones: ' + actions.join(', '), 'dim');
+    }
+    return;
+  }
+
+  // Autocompletado para "sudo meow add " -> ascii names
+  if (parts[0] === 'sudo' && parts[1] === 'meow' && parts[2] === 'add' && parts.length <= 4) {
+    var keys = Object.keys(ASCII_ARTS);
+    if (parts.length === 4 && parts[3] !== '') {
+      var matches = keys.filter(function(k) { return k.indexOf(parts[3]) === 0; });
+      if (matches.length === 1) input.value = 'sudo meow add ' + matches[0];
+    } else {
+      print('ASCII: ' + keys.join(', '), 'dim');
+    }
+    return;
+  }
+
+  // Autocompletado para "sudo meow gen " -> formats
+  if (parts[0] === 'sudo' && parts[1] === 'meow' && parts[2] === 'gen' && parts.length <= 4) {
+    var formats = ['txt', 'png', 'pdf'];
+    if (parts.length === 4 && parts[3] !== '') {
+      var matches = formats.filter(function(f) { return f.indexOf(parts[3]) === 0; });
+      if (matches.length === 1) input.value = 'sudo meow gen ' + matches[0];
+    } else {
+      print('Formatos: ' + formats.join(', '), 'dim');
+    }
+    return;
+  }
+}
+
+input.addEventListener('keydown', function(e) {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    autocomplete();
+    return;
+  }
+
+  if (e.key === 'Enter' || e.keyCode === 13) {
+    e.preventDefault();
+    var val = input.value;
+    input.value = '';
+    if (val.trim()) {
+      history.push(val.trim());
+      histIndex = history.length;
+    }
+    handleCommand(val);
+  }
+
+  // Navegación de historial con flechas (si hay teclado físico)
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (histIndex > 0) {
+      histIndex--;
+      input.value = history[histIndex];
+    }
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (histIndex < history.length - 1) {
+      histIndex++;
+      input.value = history[histIndex];
+    } else {
+      histIndex = history.length;
+      input.value = '';
+    }
+  }
+});
+
+// NUEVO: Botones de historial
+document.getElementById('btnUp').addEventListener('click', function(e) {
+  e.preventDefault();
+  if (histIndex > 0) {
+    histIndex--;
+    input.value = history[histIndex];
+  }
+});
+document.getElementById('btnDown').addEventListener('click', function(e) {
+  e.preventDefault();
+  if (histIndex < history.length - 1) {
+    histIndex++;
+    input.value = history[histIndex];
+  } else {
+    histIndex = history.length;
+    input.value = '';
+  }
+});
+
 function handleCommand(raw) {
   raw = raw.trim();
   if (!raw) return;
@@ -712,33 +1071,47 @@ function handleCommand(raw) {
   }
 }
 
-input.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter' || e.keyCode === 13) {
-    e.preventDefault();
-    var val = input.value;
-    input.value = '';
-    handleCommand(val);
-  }
-});
-
 document.getElementById('terminal').addEventListener('touchstart', function(e) {
-  if (e.target.tagName !== 'INPUT') setTimeout(function() { input.focus(); }, 50);
+  if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') {
+    setTimeout(function() { input.focus(); }, 50);
+  }
 }, { passive: true });
 
 document.getElementById('terminal').addEventListener('click', function(e) {
-  if (e.target.tagName !== 'INPUT') input.focus();
+  if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') input.focus();
 });
 
 // ============================================================
-// INIT
+// INIT & BOOT SEQUENCE
 // ============================================================
 loadState();
-print('fastfetch-web-terminal v0.4 (sudo edition)', 'success');
-print('Escribe "help" para ver los comandos.', 'dim');
-if (state.ascii) print('(config restaurada: ASCII "' + state.ascii + '")', 'dim');
+output.innerHTML = ''; // Limpiar output al inicio
+print('Fastfetch Web OS v1.0.4', 'success');
+print('Copyright (c) 2026 Galeed.', 'dim');
 print('');
 
-setTimeout(function() { input.focus(); }, 300);
+var bootLines = [
+  '[ OK ] Iniciando kernel virtual...',
+  '[ OK ] Cargando módulos de color ANSI...',
+  '[ OK ] Montando sistema de archivos en memoria...',
+  '[ OK ] Iniciando servicio web-terminal...'
+];
+
+var i = 0;
+function boot() {
+  if (i < bootLines.length) {
+    print(bootLines[i], 'success');
+    i++;
+    setTimeout(boot, 200);
+  } else {
+    print('');
+    print('Listo. Escribe "help" para ver los comandos.', 'dim');
+    if (state.ascii) print('(config restaurada: ASCII "' + state.ascii + '")', 'dim');
+    print('');
+    setTimeout(function() { input.focus(); }, 300);
+  }
+}
+setTimeout(boot, 300);
 
 })();
 </script>
