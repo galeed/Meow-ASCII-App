@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0d1117">
-<title>fastfetch-web-terminal</title>
+<title>Meow FWT</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
@@ -86,7 +86,7 @@
   <div id="output"></div>
   <div id="preview-box"></div>
   <div class="input-line">
-    <span>fastfetch@safari:~$</span>
+    <span>meow@fwt:~$</span>
     <input id="cmdInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" autofocus>
     <div class="hist-btns">
       <button id="btnUp" tabindex="-1">↑</button>
@@ -128,8 +128,8 @@ document.addEventListener('wheel', function(e) { if (e.ctrlKey) e.preventDefault
 // ============================================================
 (function() {
   var manifest = {
-    "name": "Fastfetch Web Terminal",
-    "short_name": "Fastfetch",
+    "name": "Meow FWT",
+    "short_name": "Meow FWT",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0d1117",
@@ -364,19 +364,19 @@ var INFO_STYLE = { user:'#8ae234', at:'#d3d7cf', sep:'#555753', label:'#729fcf',
 // ============================================================
 // ESTADO Y PERSISTENCIA
 // ============================================================
-var STORAGE_KEY = 'fastfetch-web-v1';
+var STORAGE_KEY = 'meow-fwt-v1';
 var state = {
   ascii: null,
   installed: [],
-  presets: {}, // NUEVO: para guardar configuraciones
+  presets: {},
   data: {
     user:'usuario', host:'iPhone', os:'iOS 17.4',
     kernel:'Darwin 23.4.0', uptime:'2 hours, 15 mins',
-    shell:'zsh 5.9', terminal:'Safari Web Terminal',
+    shell:'zsh 5.9', terminal:'Meow FWT',
     cpu:'Apple A17 Pro', memory:'8192MiB / 8192MiB'
   },
   customThemes: {},
-  typewriter: true // NUEVO: config para el efecto typewriter
+  typewriter: true
 };
 
 function saveState() {
@@ -422,7 +422,6 @@ function escapeHTML(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// NUEVO: Efecto Typewriter
 function typewriterPrint(html, cls, callback) {
   if (!state.typewriter || !html) {
     var div = document.createElement('div');
@@ -438,7 +437,6 @@ function typewriterPrint(html, cls, callback) {
   div.className = 'line ' + (cls || '');
   output.appendChild(div);
   
-  // Parsear el HTML para animar por nodos de texto
   var temp = document.createElement('div');
   temp.innerHTML = html;
   var nodes = Array.from(temp.childNodes);
@@ -451,21 +449,20 @@ function typewriterPrint(html, cls, callback) {
       return;
     }
     var node = nodes[nodeIndex];
-    if (node.nodeType === 3) { // Text node
+    if (node.nodeType === 3) {
       if (charIndex < node.textContent.length) {
         div.appendChild(document.createTextNode(node.textContent[charIndex]));
         charIndex++;
         window.scrollTo(0, document.body.scrollHeight);
-        setTimeout(processNextNode, 1); // velocidad
+        setTimeout(processNextNode, 1);
       } else {
         nodeIndex++;
         charIndex = 0;
         processNextNode();
       }
-    } else { // Element node (span)
+    } else {
       var clone = node.cloneNode(false);
       div.appendChild(clone);
-      // Animamos el texto dentro del span recursivamente
       var spanText = node.textContent;
       if (spanText.length > 0) {
         var spanChar = 0;
@@ -580,7 +577,7 @@ function renderPreview() {
 var commands = {};
 
 commands.help = function() {
-  print('Comandos disponibles:', 'dim');
+  print('Comandos de Meow FWT:', 'dim');
   print('  help                                  - Muestra esta ayuda');
   print('  list-ascii                            - Lista los ASCII del repositorio');
   print('  fastfetch | neofetch                  - Muestra el logo y datos en consola');
@@ -627,16 +624,16 @@ commands.set = function(args) {
 
 commands.fastfetch = function() {
   if (!state.ascii) return print('No hay ASCII cargado. Usa: sudo meow add <nombre>', 'error');
-  print(''); // separador
+  print('');
   var html = buildFastfetchHTML(state.ascii);
   typewriterPrint(html);
 };
-commands.neofetch = commands.fastfetch; // Alias
+commands.neofetch = commands.fastfetch;
 
 commands.ascii = function(args) {
   var name = args[0];
   if (!name || !ASCII_ARTS[name]) return print('Uso: ascii <nombre>. Prueba list-ascii.', 'error');
-  print(''); // separador
+  print('');
   var palette = getPalette(name);
   var artLines = ASCII_ARTS[name].split('\n');
   var html = '';
@@ -659,15 +656,15 @@ commands.share = function(args) {
 
   if (type === 'txt') {
     var text = buildFastfetchPlainText();
-    navigator.share({ title: 'fastfetch', text: text }).catch(function(){});
+    navigator.share({ title: 'Meow FWT', text: text }).catch(function(){});
   } else if (type === 'png') {
     renderPreview();
     if (typeof html2canvas !== 'function') return print('Librería PNG no cargada.', 'error');
     html2canvas(previewBox, { backgroundColor: '#161b22', scale: 2 }).then(function(canvas) {
       canvas.toBlob(function(blob) {
-        var file = new File([blob], 'fastfetch.png', { type: 'image/png' });
+        var file = new File([blob], 'meow-fwt.png', { type: 'image/png' });
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          navigator.share({ files: [file], title: 'fastfetch' }).catch(function(){});
+          navigator.share({ files: [file], title: 'Meow FWT' }).catch(function(){});
         } else {
           print('Tu navegador no soporta compartir archivos. Usa: sudo meow gen png', 'warn');
         }
@@ -729,7 +726,7 @@ commands.reset = function() {
   state.customThemes = {};
   state.data = {
     user:'usuario', host:'iPhone', os:'iOS 17.4', kernel:'Darwin 23.4.0',
-    uptime:'2 hours, 15 mins', shell:'zsh 5.9', terminal:'Safari Web Terminal',
+    uptime:'2 hours, 15 mins', shell:'zsh 5.9', terminal:'Meow FWT',
     cpu:'Apple A17 Pro', memory:'8192MiB / 8192MiB'
   };
   previewBox.style.display = 'none';
@@ -907,15 +904,15 @@ commands.sudo = function(args) {
 // ============================================================
 function exportTxt() {
   var text = buildFastfetchPlainText();
-  downloadBlob(new Blob([text], {type:'text/plain'}), 'fastfetch.txt');
-  print('✓ Archivo fastfetch.txt guardado.', 'success');
+  downloadBlob(new Blob([text], {type:'text/plain'}), 'meow-fwt.txt');
+  print('✓ Archivo meow-fwt.txt guardado.', 'success');
 }
 function exportPng() {
   if (typeof html2canvas !== 'function') return print('Error: librería PNG no cargada.', 'error');
   html2canvas(previewBox, { backgroundColor: '#161b22', scale: 2 }).then(function(canvas) {
     canvas.toBlob(function(blob) {
-      downloadBlob(blob, 'fastfetch.png');
-      print('✓ Archivo fastfetch.png guardado.', 'success');
+      downloadBlob(blob, 'meow-fwt.png');
+      print('✓ Archivo meow-fwt.png guardado.', 'success');
     });
   }).catch(function(e) {
     print('Error al generar PNG: ' + e.message, 'error');
@@ -929,8 +926,8 @@ function exportPdf() {
   var text = buildFastfetchPlainText();
   var lines = doc.splitTextToSize(text, 540);
   doc.text(lines, 30, 40);
-  doc.save('fastfetch.pdf');
-  print('✓ Archivo fastfetch.pdf guardado.', 'success');
+  doc.save('meow-fwt.pdf');
+  print('✓ Archivo meow-fwt.pdf guardado.', 'success');
 }
 function downloadBlob(blob, filename) {
   var url = URL.createObjectURL(blob);
@@ -946,12 +943,10 @@ function downloadBlob(blob, filename) {
 // INPUT HANDLING & AUTOCOMPLETADO
 // ============================================================
 
-// NUEVO: Lógica de autocompletado
 function autocomplete() {
   var val = input.value;
   var parts = val.split(/\s+/);
   
-  // Autocompletado para "sud" -> "sudo"
   if (parts.length === 1) {
     var cmds = Object.keys(commands);
     var matches = cmds.filter(function(c) { return c.indexOf(parts[0]) === 0; });
@@ -961,7 +956,6 @@ function autocomplete() {
     return;
   }
 
-  // Autocompletado para "sudo meow " -> acciones
   if (parts[0] === 'sudo' && parts[1] === 'meow' && parts.length <= 3) {
     var actions = ['add', 'gen', 'list', 'status', 'save', 'load', 'presets'];
     if (parts.length === 3 && parts[2] !== '') {
@@ -973,7 +967,6 @@ function autocomplete() {
     return;
   }
 
-  // Autocompletado para "sudo meow add " -> ascii names
   if (parts[0] === 'sudo' && parts[1] === 'meow' && parts[2] === 'add' && parts.length <= 4) {
     var keys = Object.keys(ASCII_ARTS);
     if (parts.length === 4 && parts[3] !== '') {
@@ -985,7 +978,6 @@ function autocomplete() {
     return;
   }
 
-  // Autocompletado para "sudo meow gen " -> formats
   if (parts[0] === 'sudo' && parts[1] === 'meow' && parts[2] === 'gen' && parts.length <= 4) {
     var formats = ['txt', 'png', 'pdf'];
     if (parts.length === 4 && parts[3] !== '') {
@@ -1016,7 +1008,6 @@ input.addEventListener('keydown', function(e) {
     handleCommand(val);
   }
 
-  // Navegación de historial con flechas (si hay teclado físico)
   if (e.key === 'ArrowUp') {
     e.preventDefault();
     if (histIndex > 0) {
@@ -1036,7 +1027,6 @@ input.addEventListener('keydown', function(e) {
   }
 });
 
-// NUEVO: Botones de historial
 document.getElementById('btnUp').addEventListener('click', function(e) {
   e.preventDefault();
   if (histIndex > 0) {
@@ -1058,7 +1048,7 @@ document.getElementById('btnDown').addEventListener('click', function(e) {
 function handleCommand(raw) {
   raw = raw.trim();
   if (!raw) return;
-  print('fastfetch@safari:~$ ' + raw);
+  print('meow@fwt:~$ ' + raw);
   var parts = raw.split(/\s+/);
   var cmd = parts[0];
   var args = parts.slice(1);
@@ -1085,8 +1075,8 @@ document.getElementById('terminal').addEventListener('click', function(e) {
 // INIT & BOOT SEQUENCE
 // ============================================================
 loadState();
-output.innerHTML = ''; // Limpiar output al inicio
-print('Fastfetch Web OS v1.0.4', 'success');
+output.innerHTML = ''; 
+print('Meow FWT v1.0 (Fastfetch Web Terminal)', 'success');
 print('Copyright (c) 2026 Galeed.', 'dim');
 print('');
 
@@ -1094,7 +1084,7 @@ var bootLines = [
   '[ OK ] Iniciando kernel virtual...',
   '[ OK ] Cargando módulos de color ANSI...',
   '[ OK ] Montando sistema de archivos en memoria...',
-  '[ OK ] Iniciando servicio web-terminal...'
+  '[ OK ] Iniciando servicio meow-terminal...'
 ];
 
 var i = 0;
