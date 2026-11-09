@@ -406,3 +406,341 @@ function buildFastfetchHTML() {
     '<span style="color:' + INFO_STYLE.at + '">@</span>' +
     '<span style="color:' + INFO_STYLE.user + '">' + escapeHTML(d.host) + '</span>',
     '<span style="color:' + INFO_STYLE.sep + '">-------------------</span>',
+    infoLine('OS', d.os), infoLine('Host', d.host), infoLine('Kernel', d.kernel),
+    infoLine('Uptime', d.uptime), infoLine('Shell', d.shell), infoLine('Terminal', d.terminal),
+    infoLine('CPU', d.cpu), infoLine('Memory', d.memory)
+  ];
+  var maxLines = Math.max(artLines.length, infoLines.length);
+  var artWidth = 0;
+  for (var i = 0; i < artLines.length; i++) {
+    var w = stripPlaceholders(artLines[i]).length;
+    if (w > artWidth) artWidth = w;
+  }
+  var html = '';
+  for (var j = 0; j < maxLines; j++) {
+    var raw = artLines[j] || '';
+    var stripped = stripPlaceholders(raw);
+    var paddedRaw = raw + new Array(Math.max(0, artWidth - stripped.length) + 1).join(' ');
+    var coloredArt = colorizeLogo(paddedRaw, palette);
+    var info = infoLines[j] || '';
+    html += '<div class="ff-line"><span class="ff-art">' + coloredArt + '</span><span class="ff-info">   ' + info + '</span></div>';
+  }
+  return html;
+}
+
+function buildFastfetchPlainText() {
+  var d = state.data;
+  var artLines = ASCII_ARTS[state.ascii].split('\n').map(stripPlaceholders);
+  var infoLines = [
+    d.user + '@' + d.host, '-------------------',
+    'OS: ' + d.os, 'Host: ' + d.host, 'Kernel: ' + d.kernel,
+    'Uptime: ' + d.uptime, 'Shell: ' + d.shell, 'Terminal: ' + d.terminal,
+    'CPU: ' + d.cpu, 'Memory: ' + d.memory
+  ];
+  var maxLines = Math.max(artLines.length, infoLines.length);
+  var artWidth = 0;
+  for (var i = 0; i < artLines.length; i++) { if (artLines[i].length > artWidth) artWidth = artLines[i].length; }
+  var out = '';
+  for (var j = 0; j < maxLines; j++) {
+    var a = (artLines[j] || '');
+    var pad = new Array(Math.max(0, artWidth - a.length) + 1).join(' ');
+    out += (a + pad) + '   ' + (infoLines[j] || '') + '\n';
+  }
+  return out;
+}
+
+function renderPreview() {
+  previewBox.innerHTML = buildFastfetchHTML();
+  previewBox.style.display = 'block';
+}
+
+// ============================================================
+// COMANDOS
+// ============================================================
+var commands = {};
+
+commands.help = function() {
+  print('Comandos disponibles:', 'dim');
+  print('  help                                  - Muestra esta ayuda');
+  print('  list-ascii                            - Lista los ASCII del repositorio');
+  print('  sudo meow list                        - Lista ASCII instalados en tu sesión');
+  print('  sudo meow add <nombre>                - Instala/descarga un ASCII');
+  print('  sudo meow gen <txt|png|pdf>           - Genera y exporta el archivo');
+  print('  sudo meow status                      - Muestra el ASCII actual');
+  print('  set <campo> <valor>                   - Configura un dato');
+  print('  fields                                - Lista los campos configurables');
+  print('  preview                               - Previsualiza el resultado');
+  print('  theme                                 - Ver temas configurados');
+  print('  theme <ascii> <c1> [c2...]            - Cambiar paleta de un ASCII');
+  print('  theme reset <ascii>                   - Resetear paleta de un ASCII');
+  print('  save                                  - Guardar config');
+  print('  reset                                 - Borrar config guardada');
+  print('  clear                                 - Limpia la terminal');
+};
+
+commands['list-ascii'] = function() {
+  print('ASCII disponibles en el repositorio:', 'dim');
+  Object.keys(ASCII_ARTS).forEach(function(k) { print('  • ' + k); });
+  print('Usa: sudo meow add <nombre>', 'dim');
+};
+
+commands.fields = function() {
+  print('Campos configurables (set <campo> <valor>):', 'dim');
+  Object.keys(state.data).forEach(function(k) { print('  • ' + k); });
+};
+
+commands.set = function(args) {
+  var key = args[0];
+  var value = args.slice(1).join(' ');
+  if (!key || !value) return print('Uso: set <campo> <valor>', 'error');
+  if (!(key in state.data)) return print('Campo "' + key + '" no existe. Usa fields.', 'error');
+  state.data[key] = value;
+  saveState();
+  print('✓ ' + key + ' = ' + value, 'success');
+};
+
+commands.preview = function() {
+  if (!state.ascii) return print('Primero instala un ASCII: sudo meow add <nombre>', 'error');
+  renderPreview();
+  print('Previsualización generada abajo ↓', 'dim');
+};
+
+commands.theme = function(args) {
+  if (args.length === 0) {
+    print('Temas configurados:', 'dim');
+    Object.keys(ASCII_ARTS).forEach(function(name) {
+      var pal = getPalette(name);
+      var src = state.customThemes[name] ? 'custom' : (THEMES[name] ? 'default' : 'fallback');
+      print('  • ' + (name + '            ').slice(0, 12) + ' [' + pal.join(', ') + ']  (' + src + ')');
+    });
+    print('', 'dim');
+    print('Cambiar:  theme <ascii> <c1> [c2...]', 'dim');
+    print('Resetear: theme reset <ascii>', 'dim');
+    print('Colores: 30-37 (normal), 90-97 (brillante)', 'dim');
+    return;
+  }
+  if (args[0] === 'reset') {
+    var n = args[1];
+    if (!n || !ASCII_ARTS[n]) return print('Uso: theme reset <ascii>', 'error');
+    delete state.customThemes[n];
+    saveState();
+    print('✓ Tema de ' + n + ' reseteado.', 'success');
+    return;
+  }
+  var name = args[0];
+  var colors = args.slice(1);
+  if (!ASCII_ARTS[name]) return print('ASCII "' + name + '" no existe.', 'error');
+  if (colors.length === 0) return print('Uso: theme <ascii> <c1> [c2...]', 'error');
+  for (var i = 0; i < colors.length; i++) {
+    if (!/^(3[0-7]|9[0-7])$/.test(colors[i])) return print('Color inválido: ' + colors[i] + '. Usa 30-37 o 90-97.', 'error');
+  }
+  state.customThemes[name] = colors;
+  saveState();
+  print('✓ Tema de ' + name + ' actualizado: [' + colors.join(', ') + ']', 'success');
+};
+
+commands.save = function() { saveState(); print('✓ Configuración guardada.', 'success'); };
+
+commands.reset = function() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+  state.ascii = null;
+  state.installed = [];
+  state.customThemes = {};
+  state.data = {
+    user:'usuario', host:'iPhone', os:'iOS 17.4', kernel:'Darwin 23.4.0',
+    uptime:'2 hours, 15 mins', shell:'zsh 5.9', terminal:'Safari Web Terminal',
+    cpu:'Apple A17 Pro', memory:'8192MiB / 8192MiB'
+  };
+  previewBox.style.display = 'none';
+  print('✓ Configuración borrada.', 'success');
+};
+
+commands.clear = function() {
+  output.innerHTML = '';
+  previewBox.style.display = 'none';
+};
+
+// ============================================================
+// EL COMANDO MAESTRO: sudo
+// ============================================================
+commands.sudo = function(args) {
+  // Validar que sea sudo meow
+  if (args[0] !== 'meow') {
+    return print('sudo: comando no permitido. Usa "sudo meow <acción>".', 'error');
+  }
+
+  var action = args[1];
+  var rest = args.slice(2);
+
+  if (!action) {
+    print('Uso: sudo meow <acción> [args]', 'dim');
+    print('Acciones: add, gen, list, status', 'dim');
+    return;
+  }
+
+  // --- sudo meow add <nombre> ---
+  if (action === 'add') {
+    var name = rest[0];
+    if (!name) return print('Uso: sudo meow add <nombre>', 'error');
+    if (!ASCII_ARTS[name]) return print('ASCII "' + name + '" no existe. Prueba list-ascii.', 'error');
+
+    print('[sudo] password for usuario: ********', 'dim');
+    print('Conectando al repositorio remoto...', 'dim');
+    print('Descargando ' + name + '...');
+
+    var bar = document.createElement('div');
+    bar.className = 'line progress';
+    output.appendChild(bar);
+
+    var pct = 0;
+    var interval = setInterval(function() {
+      pct += 4;
+      if (pct > 100) pct = 100;
+      var filled = Math.round(pct / 5);
+      var empty = 20 - filled;
+      var speed = (Math.random() * 4 + 1).toFixed(1);
+      bar.textContent = '  [' + new Array(filled+1).join('█') + new Array(empty+1).join('░') + '] ' + Math.round(pct) + '%  ' + speed + ' MB/s';
+      window.scrollTo(0, document.body.scrollHeight);
+      if (pct >= 100) {
+        clearInterval(interval);
+        state.ascii = name;
+        if (state.installed.indexOf(name) === -1) state.installed.push(name);
+        saveState();
+        print('✓ ' + name + ' instalado y cargado en la sesión.', 'success');
+      }
+    }, 60);
+    return;
+  }
+
+  // --- sudo meow list ---
+  if (action === 'list') {
+    if (state.installed.length === 0) return print('No hay ASCII instalados. Usa: sudo meow add <nombre>', 'warn');
+    print('ASCII instalados:', 'dim');
+    state.installed.forEach(function(k) {
+      var marker = (k === state.ascii) ? ' (activo)' : '';
+      print('  • ' + k + marker);
+    });
+    return;
+  }
+
+  // --- sudo meow status ---
+  if (action === 'status') {
+    if (!state.ascii) return print('Ningún ASCII cargado actualmente.', 'warn');
+    print('ASCII activo: ' + state.ascii, 'success');
+    print('Total instalados: ' + state.installed.length, 'dim');
+    return;
+  }
+
+  // --- sudo meow gen <formato> ---
+  if (action === 'gen') {
+    var type = rest[0];
+    if (!type) return print('Uso: sudo meow gen <txt|png|pdf>', 'error');
+    if (['png','txt','pdf'].indexOf(type) === -1) return print('Formato no válido. Usa: txt, png o pdf.', 'error');
+    if (!state.ascii) return print('No hay ASCII cargado. Usa: sudo meow add <nombre>', 'error');
+
+    print('[sudo] Generando archivo ' + type.toUpperCase() + '...', 'dim');
+    renderPreview();
+    
+    setTimeout(function() {
+      if (type === 'txt') exportTxt();
+      if (type === 'png') exportPng();
+      if (type === 'pdf') exportPdf();
+    }, 300); // Pequeño delay para que el usuario vea el mensaje
+    return;
+  }
+
+  print('sudo meow: acción "' + action + '" no reconocida.', 'error');
+  print('Acciones válidas: add, gen, list, status', 'dim');
+};
+
+// ============================================================
+// EXPORTS
+// ============================================================
+function exportTxt() {
+  var text = buildFastfetchPlainText();
+  downloadBlob(new Blob([text], {type:'text/plain'}), 'fastfetch.txt');
+  print('✓ Archivo fastfetch.txt guardado en Descargas.', 'success');
+}
+function exportPng() {
+  if (typeof html2canvas !== 'function') return print('Error: librería PNG no cargada.', 'error');
+  html2canvas(previewBox, { backgroundColor: '#161b22', scale: 2 }).then(function(canvas) {
+    canvas.toBlob(function(blob) {
+      downloadBlob(blob, 'fastfetch.png');
+      print('✓ Archivo fastfetch.png guardado en Fotos/Descargas.', 'success');
+    });
+  }).catch(function(e) {
+    print('Error al generar PNG: ' + e.message, 'error');
+  });
+}
+function exportPdf() {
+  if (!window.jspdf || !window.jspdf.jsPDF) return print('Error: librería PDF no cargada.', 'error');
+  var doc = new window.jspdf.jsPDF({ unit:'pt', format:'a4' });
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(9);
+  var text = buildFastfetchPlainText();
+  var lines = doc.splitTextToSize(text, 540);
+  doc.text(lines, 30, 40);
+  doc.save('fastfetch.pdf');
+  print('✓ Archivo fastfetch.pdf guardado en Descargas.', 'success');
+}
+function downloadBlob(blob, filename) {
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+}
+
+// ============================================================
+// INPUT HANDLING
+// ============================================================
+function handleCommand(raw) {
+  raw = raw.trim();
+  if (!raw) return;
+  print('fastfetch@safari:~$ ' + raw);
+  var parts = raw.split(/\s+/);
+  var cmd = parts[0];
+  var args = parts.slice(1);
+  
+  if (commands[cmd]) {
+    try { commands[cmd](args); }
+    catch (err) { print('Error: ' + err.message, 'error'); }
+  } else {
+    print('comando no encontrado: ' + cmd + ". Escribe 'help'.", 'error');
+  }
+}
+
+input.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' || e.keyCode === 13) {
+    e.preventDefault();
+    var val = input.value;
+    input.value = '';
+    handleCommand(val);
+  }
+});
+
+document.getElementById('terminal').addEventListener('touchstart', function(e) {
+  if (e.target.tagName !== 'INPUT') setTimeout(function() { input.focus(); }, 50);
+}, { passive: true });
+
+document.getElementById('terminal').addEventListener('click', function(e) {
+  if (e.target.tagName !== 'INPUT') input.focus();
+});
+
+// ============================================================
+// INIT
+// ============================================================
+loadState();
+print('fastfetch-web-terminal v0.4 (sudo edition)', 'success');
+print('Escribe "help" para ver los comandos.', 'dim');
+if (state.ascii) print('(config restaurada: ASCII "' + state.ascii + '")', 'dim');
+print('');
+
+setTimeout(function() { input.focus(); }, 300);
+
+})();
+</script>
+</body>
+</html>
