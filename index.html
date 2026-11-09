@@ -9,6 +9,7 @@
 <title>Meow FWT</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   * {
     box-sizing: border-box;
@@ -28,25 +29,16 @@
   }
   #terminal {
     padding: calc(12px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)) 12px;
-    height: 100vh;
-    height: 100dvh;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
+    height: 100vh; height: 100dvh;
+    overflow-y: auto; display: flex; flex-direction: column;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     touch-action: pan-y;
   }
-  #output {
-    white-space: pre-wrap; word-break: break-word; flex: 1;
-    user-select: text; -webkit-user-select: text;
-  }
+  #output { white-space: pre-wrap; word-break: break-word; flex: 1; user-select: text; -webkit-user-select: text; }
   .line { white-space: pre-wrap; }
-  .error { color: #f85149; }
-  .success { color: #3fb950; }
-  .dim { color: #8b949e; }
-  .warn { color: #d29922; }
-  .progress { color: #58a6ff; }
+  .error { color: #f85149; } .success { color: #3fb950; } .dim { color: #8b949e; }
+  .warn { color: #d29922; } .progress { color: #58a6ff; } .cyan { color: #34e2e2; }
   
   .input-line { display: flex; align-items: center; }
   .input-line span { color: #58a6ff; margin-right: 6px; flex-shrink: 0; }
@@ -59,9 +51,7 @@
     user-select: text; -webkit-user-select: text;
   }
 
-  .hist-btns {
-    display: flex; flex-direction: column; gap: 2px; margin-left: 8px;
-  }
+  .hist-btns { display: flex; flex-direction: column; gap: 2px; margin-left: 8px; }
   .hist-btns button {
     background: #161b22; border: 1px solid #30363d; color: #8b949e;
     border-radius: 4px; width: 24px; height: 20px; font-size: 10px;
@@ -79,6 +69,11 @@
   .ff-line { display: flex; }
   .ff-art { white-space: pre; flex-shrink: 0; }
   .ff-info { white-space: pre; }
+
+  /* Estilos para utilidades visuales */
+  .color-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 8px 0; max-width: 300px; }
+  .color-swatch { padding: 4px; text-align: center; border-radius: 4px; font-weight: bold; font-size: 11px; cursor: pointer; }
+  .qr-container { background: #fff; padding: 10px; display: inline-block; margin: 8px 0; border-radius: 6px; }
 </style>
 </head>
 <body>
@@ -86,7 +81,7 @@
   <div id="output"></div>
   <div id="preview-box"></div>
   <div class="input-line">
-    <span>meow@fwt:~$</span>
+    <span id="promptText">meow@fwt:~$</span>
     <input id="cmdInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" autofocus>
     <div class="hist-btns">
       <button id="btnUp" tabindex="-1">↑</button>
@@ -110,7 +105,7 @@ window.onerror = function(msg, url, line, col, err) {
 (function() {
 'use strict';
 
-// ===== BLOQUEO DE ZOOM Y REBOTES =====
+// ===== BLOQUEO DE ZOOM =====
 document.addEventListener('gesturestart', function(e) { e.preventDefault(); }, { passive: false });
 document.addEventListener('gesturechange', function(e) { e.preventDefault(); }, { passive: false });
 document.addEventListener('gestureend', function(e) { e.preventDefault(); }, { passive: false });
@@ -121,283 +116,74 @@ document.addEventListener('touchend', function(e) {
   lastTouchEnd = now;
 }, { passive: false });
 document.addEventListener('wheel', function(e) { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
-// ===== FIN BLOQUEO =====
 
-// ============================================================
-// PWA MANIFEST DINÁMICO
-// ============================================================
+// ===== PWA MANIFEST =====
 (function() {
   var manifest = {
-    "name": "Meow FWT",
-    "short_name": "Meow FWT",
-    "start_url": ".",
-    "display": "standalone",
-    "background_color": "#0d1117",
-    "theme_color": "#0d1117",
-    "icons": [{
-      "src": "icon.png",
-      "sizes": "192x192 512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }]
+    "name": "Meow FWT", "short_name": "Meow FWT", "start_url": ".",
+    "display": "standalone", "background_color": "#0d1117", "theme_color": "#0d1117",
+    "icons": [{ "src": "icon.png", "sizes": "192x192 512x512", "type": "image/png", "purpose": "any maskable" }]
   };
   var blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
   var link = document.createElement('link');
-  link.rel = 'manifest';
-  link.href = URL.createObjectURL(blob);
+  link.rel = 'manifest'; link.href = URL.createObjectURL(blob);
   document.head.appendChild(link);
 })();
 
 // ============================================================
-// ASCII ARTS
+// ASCII ARTS (Se mantienen todos los que ya tenías)
 // ============================================================
 var ASCII_ARTS = {};
-
-ASCII_ARTS.arch = [
-"                   -`", "                  .o+`", "                 `ooo/", "                `+oooo:",
-"               `+oooooo:", "               -+oooooo+:", "             `/:-:++oooo+:",
-"            `/++++/+++++++:", "           `/++++++++++++++:", "          `/+++o$2oooooooo$1oooo/`",
-"         ./$2ooosssso++osssssso$1+`", "$2       .oossssso-````/ossssss+`",
-"       -osssssso.      :ssssssso.", "      :osssssss/        osssso+++.",
-"     /ossssssss/        +ssssooo/-", "   `/ossssso+/:-        -:/+osssso+-",
-"  `+sso+:-`                 `.-/+oso:", " `++:.                           `-/+",
-" .`                                 `/"
-].join("\n");
-
-ASCII_ARTS.ubuntu = [
-"                             ....", "              $1.',:clooo:  $2.:looooo:.",
-"           $1.;looooooooc  $2.oooooooooo'", "        $1.;looooool:,''.  $2:ooooooooooc",
-"       $1;looool;.         $2'oooooooooo,", "      $1;clool'             $2.cooooooc.  $1,,",
-"         $1...                $2......  $1.:oo,", "  $2.;clol:,.                        $1.loooo'",
-" $2:ooooooooo,                        $1'ooool", "$2'ooooooooooo.                        $1loooo.",
-"$2'ooooooooool                         $1coooo.", " $2,loooooooc.                        $1.loooo.",
-"   $2.,;;;'.                          $1;ooooc", "       $1...                         $1,ooool.",
-"    $1.cooooc.              $2..',,'.  $1.cooo.", "      $1;ooooo:.           $2;oooooooc.  $1:l.",
-"       $1.coooooc,..      $2coooooooooo.", "         $1.:ooooooolc:. $2.ooooooooooo'",
-"           $1.':loooooo;  $2,oooooooooc", "               $1..';::c'  $2.;loooo:'"
-].join("\n");
-
-ASCII_ARTS.debian = [
-"        $2_,met$$$$$$$$$$gg.", "     ,g$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$P.",
-"   ,g$$$$P\"\"       \"\"\"Y$$$$.\".", "  ,$$$$P'              `$$$$$$.",
-"',$$$$P       ,ggs.     `$$$$b:", "`d$$$$'     ,$P\"'   $1.$2    $$$$$$",
-" $$$$P      d$'     $1,$2    $$$$P", " $$$$:      $$$.   $1-$2    ,d$$$$'",
-" $$$$;      Y$b._   _,d$P'", " Y$$$$.    $1`.$2`\"Y$$$$$$$$P\"'",
-" `$$$$b      $1\"-.__", "  $2`Y$$$$b", "   `Y$$$$.", "     `$$$$b.",
-"       `Y$$$$b.", "         `\"Y$$b._", "             `\"\"\"\""
-].join("\n");
-
-ASCII_ARTS.fedora = [
-"             .',;::::;,'.", "         .';:cccccccccccc:;,.",
-"      .;cccccccccccccccccccccc;.", "    .:cccccccccccccccccccccccccc:.",
-"  .;ccccccccccccc;$2.:dddl:.$1;ccccccc;.", " .:ccccccccccccc;$2OWMKOOXMWd$1;ccccccc:.",
-".:ccccccccccccc;$2KMMc$1;cc;$2xMMc$1;ccccccc:.", ",cccccccccccccc;$2MMM.$1;cc;$2;WW:$1;cccccccc,",
-":cccccccccccccc;$2MMM.$1;cccccccccccccccc:", ":ccccccc;$2oxOOOo$1;$2MMM000k.$1;cccccccccccc:",
-"cccccc;$20MMKxdd:$1;$2MMMkddc.$1;cccccccccccc;", "ccccc;$2XMO'$1;cccc;$2MMM.$1;cccccccccccccccc'",
-"ccccc;$2MMo$1;ccccc;$2MMW.$1;ccccccccccccccc;", "ccccc;$20MNc.$1ccc$2.xMMd$1;ccccccccccccccc;",
-"cccccc;$2dNMWXXXWM0:$1;cccccccccccccc:,", "cccccccc;$2.:odl:.$1;cccccccccccccc:,.",
-"ccccccccccccccccccccccccccccc:'.", ":ccccccccccccccccccccccc:;,..", " ':cccccccccccccccc::;,."
-].join("\n");
-
-ASCII_ARTS.mint = [
-"MMMMMMMMMMMMMMMMMMMMMMMMMmds.", "MMMMMMMMMMMMMMMMMMMMMMMMNMMMMNNdy.",
-"MMMMMMMMMMMMMMMMMMMMMMMMNMMMMMMMMNy.", "MMMMMMMM$2................$1MMMMMMMMMMMMM.",
-"MMMMMMMM$2:dddddddddddddddd$1MMMMMMMMMMMM.", "MMMMMMMM$2:dddddddddddddddd$1MMMMMMMMMMMM.",
-"MMMMMMMM$2:dddddddddddddddd$1MMMMMMMMMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMMMMMMMMMMMMMMM.",
-"MMMMMMMM$2:dddddddd$1MMMMMMMMMMMMMMMMMMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMMMMMMMMMMMMMMM.",
-"MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.",
-"MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.",
-"MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.",
-"MMMMMMMM$2......$1MMMMMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMMMMMMMMMMMMMMMMMMM$2dddddddd$1MMMMM.",
-"MMMMMMMMMMMMMMMMMMMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM."
-].join("\n");
-
-ASCII_ARTS.opensuse = [
-"           $2.;ldkO0000Okdl;.", "       .;d00xl:^''''''^:ok00d;.",
-"     .d00l'                'o00d.", "   .d0Kd'$1  Okxol:;,.          $2:O0d",
-"  .OK$1KKK0kOKKKKKKKKKKOxo:,      $2lKO.", " ,0K$1KKKKKKKKKKKKKKK0P^$2,,,$1^dx:$2    ;00,",
-".OK$1KKKKKKKKKKKKKKKk'$2.oOPPb.$1'0k.$2   cKO.", ":KK$1KKKKKKKKKKKKKKK: $2kKx..dd $1lKd$2   'OK:",
-"dKK$1KKKKKKKKKOx0KKKd $2^0KKKO' $1kKKc$2   dKd", "dKK$1KKKKKKKKKK;.;oOKx,..$2^$1..;kKKK0.$2  dKd",
-":KK$1KKKKKKKKKK0o;...^cdxxOK0O/^^'  $2.0K:", " kKK$1KKKKKKKKKKKKK0x;,,......,;od  $2lKk",
-" '0K$1KKKKKKKKKKKKKKKKKKKK00KKOo^  $2c00'", "  'kK$1KKOxddxkOO00000Okxoc;''   $2.dKk'",
-"    l0Ko.                    .c00l'", "     'l0Kk:.              .;xK0l'",
-"        'lkK0xl:;,,,,;:ldO0kl'", "            '^:ldxkkkkxdl:^'"
-].join("\n");
-
-ASCII_ARTS.alpine = [
-"       .hddddddddddddddddddddddh.", "      :dddddddddddddddddddddddddd:",
-"     /dddddddddddddddddddddddddddd/", "    +dddddddddddddddddddddddddddddd+",
-"  `sdddddddddddddddddddddddddddddddds`", " `ydddddddddddd++hdddddddddddddddddddy`",
-".hddddddddddd+`  `+ddddh:-sdddddddddddh.", "hdddddddddd+`      `+y:    .sddddddddddh",
-"ddddddddh+`   `//`   `.`     -sddddddddd", "ddddddh+`   `/hddh/`   `:s-    -sddddddd",
-"ddddh+`   `/+/dddddh/`   `+s-    -sddddd", "ddd+`   `/o` :dddddddh/`   `oy-    .yddd",
-"hdddyo+ohddyosdddddddddho+oydddy++ohdddh", ".hddddddddddddddddddddddddddddddddddddh.",
-" `yddddddddddddddddddddddddddddddddddy`", "  `sdddddddddddddddddddddddddddddddds`",
-"    +dddddddddddddddddddddddddddddd+", "     /dddddddddddddddddddddddddddd/",
-"      :dddddddddddddddddddddddddd:", "       .hddddddddddddddddddddddh."
-].join("\n");
-
-ASCII_ARTS.gentoo = [
-"         -/oyddmdhs+:.", "     -o$2dNMMMMMMMMNNmhy+$1-`", "   -y$2NMMMMMMMMMMMNNNmmdhy$1+-",
-" `o$2mMMMMMMMMMMMMNmdmmmmddhhy$1/`", " om$2MMMMMMMMMMMN$1hhyyyo$2hmdddhhhd$1o`",
-".y$2dMMMMMMMMMMd$1hs++so/s$2mdddhhhhdm$1+`", " oy$2hdmNMMMMMMMN$1dyooy$2dmddddhhhhyhN$1d.",
-"  :o$2yhhdNNMMMMMMMNNNmmdddhhhhhyym$1Mh", "    .:$2+sydNMMMMMNNNmmmdddhhhhhhmM$1my",
-"       /m$2MMMMMMNNNmmmdddhhhhhmMNh$1s:", "    `o$2NMMMMMMMNNNmmmddddhhdmMNhs$1+`",
-"  `s$2NMMMMMMMMNNNmmmdddddmNMmhs$1/.", " /N$2MMMMMMMMNNNNmmmdddmNMNdso$1:`",
-"+M$2MMMMMMNNNNNmmmmdmNMNdso$1/-", "yM$2MNNNNNNNmmmmmNNMmhs+/$1-`",
-"/h$2MMNNNNNNNNMNdhs++/$1-`", "`/$2ohdmmddhys+++/:$1.`", "  `-//////:--."
-].join("\n");
-
-ASCII_ARTS.manjaro = [
-"██████████████████  ████████", "██████████████████  ████████", "██████████████████  ████████",
-"██████████████████  ████████", "████████            ████████", "████████  ████████  ████████",
-"████████  ████████  ████████", "████████  ████████  ████████", "████████  ████████  ████████",
-"████████  ████████  ████████", "████████  ████████  ████████", "████████  ████████  ████████",
-"████████  ████████  ████████", "████████  ████████  ████████"
-].join("\n");
-
-ASCII_ARTS.kali = [
-"..............", "            ..,;:ccc,.", "          ......''';lxO.",
-".....''''..........,:ld;", "           .';;;:::;,,.x,", "      ..'''.            0Xxoc:,.  ...",
-"  ....                ,ONkc;,;cokOdc',.", " .                   OMo           ':$2dd$1o.",
-"                    dMc               :OO;", "                    0M.                 .:o.",
-"                    ;Wd", "                     ;XO,", "                       ,d0Odlc;,..",
-"                           ..',;:cdOOd::,.", "                                    .:d;.':;.",
-"                                       'd,  .'", "                                         ;l   ..",
-"                                          .o", "                                            c",
-"                                            .'", "                                             ."
-].join("\n");
-
-ASCII_ARTS.void_ = [
-"                __.;=====;.__", "            _.=+==++=++=+=+===;.",
-"             -=+++=+===+=+=+++++=_", "        .     -=:``     `--==+=++==.",
-"       _vi,    `            --+=++++:", "      .uvnvi.       _._       -==+==+.",
-"     .vvnvnI`    .;==|==;.     :|=||=|.", "$2+QmQQm$1pvvnv;$2 _yYsyQQWUUQQQm #QmQ#$1:$2QQQWUV$QQm.",
-" $2-QQWQW$1pvvo$2wZ?.wQQQE$1==<$2QWWQ/QWQW.QQWW$1(:$2 jQWQE", "  $2-$QQQQmmU'  jQQQ$1@+=<$2QWQQ)mQQQ.mQQQC$1+;$2jWQQ@'",
-"   $2-$WQ8Y$1nI:$2   QWQQwgQQWV$1`$2mWQQ.jQWQQgyyWW@!", "     $1-1vvnvv.     `~+++`        ++|+++",
-"      +vnvnnv,                 `-|===", "       +vnvnvns.           .      :=-",
-"        -Invnvvnsi..___..=sv=.     `", "          +Invnvnvnnnnnnnnvvnn;.",
-"            ~|Invnvnvvnvvvnnv}+", "               -~|{*l}*|~"
-].join("\n");
-
-ASCII_ARTS.nixos = [
-"          $1▗▄▄▄       $2▗▄▄▄▄    ▄▄▄▖", "          $1▜███▙       $2▜███▙  ▟███▛",
-"           $1▜███▙       $2▜███▙▟███▛", "            $1▜███▙       $2▜██████▛",
-"     $1▟█████████████████▙ $2▜████▛     $3▟▙", "    $1▟███████████████████▙ $2▜███▙    $3▟██▙",
-"           $6▄▄▄▄▖           $2▜███▙  $3▟███▛", "          $6▟███▛             $2▜██▛ $3▟███▛",
-"         $6▟███▛               $2▜▛ $3▟███▛", "$6▟███████████▛                  $3▟██████████▙",
-"$6▜██████████▛                  $3▟███████████▛", "      $6▟███▛ $5▟▙               $3▟███▛",
-"     $6▟███▛ $5▟██▙             $3▟███▛", "    $6▟███▛  $5▜███▙           $3▝▀▀▀▀",
-"    $6▜██▛    $5▜███▙ $4▜██████████████████▛", "     $6▜▛     $5▟████▙ $4▜████████████████▛",
-"           $5▟██████▙         $4▜███▙", "          $5▟███▛▜███▙         $4▜███▙",
-"         $5▟███▛  ▜███▙         $4▜███▙", "         $5▝▀▀▀    ▀▀▀▀▘         $4▀▀▀▘"
-].join("\n");
-
-ASCII_ARTS.popos = [
-"             /////////////", "         /////////////////////", "      ///////$2*767$1////////////////",
-"    //////$27676767676*$1//////////////", "   /////$276767$1//$27676767$1//////////////",
-"  /////$2767676$1///$2*76767$1///////////////", " ///////$2767676$1///$276767$1.///$27676*$1///////",
-"/////////$2767676$1//$276767$1///$2767676$1////////", "//////////$276767676767$1////$276767$1/////////",
-"///////////$276767676$1//////$27676$1//////////", "////////////,$27676$1,///////$2767$1///////////",
-"/////////////*$27676$1///////$276$1////////////", "///////////////$27676$1////////////////////",
-" ///////////////$27676$1///$2767$1////////////", "  //////////////////////$2'$1////////////",
-"   //////$2.7676767676767676767,$1//////", "    /////$2767676767676767676767$1/////",
-"      ///////////////////////////", "         /////////////////////", "             /////////////"
-].join("\n");
-
-ASCII_ARTS.android = [
-"         -o          o-", "          +hydNNNNdyh+", "        +mMMMMMMMMMMMMm+",
-"      `dMM$2m:$1NMMMMMMN$2:m$1MMd`", "      hMMMMMMMMMMMMMMMMMMh", "  ..  yyyyyyyyyyyyyyyyyyyy  ..",
-".mMMm`MMMMMMMMMMMMMMMMMMMM`mMMm.", ":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:", ":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:",
-":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:", ":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:", "-MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM-",
-" +yy+ MMMMMMMMMMMMMMMMMMMM +yy+", "      mMMMMMMMMMMMMMMMMMMm", "      `/++MMMMh++hMMMM++/`",
-"          MMMMo  oMMMM", "          MMMMo  oMMMM", "          oNMm-  -mMNs"
-].join("\n");
-
-ASCII_ARTS.macos = [
-"                     ..'", "                 ,xNMM.", "               .OMMMMo", "               lMM\"",
-"     .;loddo:.  .olloddol;.", "   cKMMMMMMMMMMNWMMMMMMMMMM0:", " $2.KMMMMMMMMMMMMMMMMMMMMMMMWd.",
-" XMMMMMMMMMMMMMMMMMMMMMMMX.", "$3;MMMMMMMMMMMMMMMMMMMMMMMM:", ":MMMMMMMMMMMMMMMMMMMMMMMM:",
-"$4.MMMMMMMMMMMMMMMMMMMMMMMMX.", " kMMMMMMMMMMMMMMMMMMMMMMMMWd.", " $5'XMMMMMMMMMMMMMMMMMMMMMMMMMMk",
-"  'XMMMMMMMMMMMMMMMMMMMMMMMMK.", "    $6kMMMMMMMMMMMMMMMMMMMMMMd", "     ;KMMMMMMMWXXWMMMMMMMk.",
-"       \"cooc*\"    \"*coo'\""
-].join("\n");
-
-ASCII_ARTS.parrot = [
-"  `:oho/-`", "`mMMMMMMMMMMMNmmdhy-", " dMMMMMMMMMMMMMMMMMMs`", " +MMsohNMMMMMMMMMMMMMm/",
-" .My   .+dMMMMMMMMMMMMMh.", "  +       :NMMMMMMMMMMMMNo", "           `yMMMMMMMMMMMMMm:",
-"             /NMMMMMMMMMMMMMy`", "              .hMMMMMMMMMMMMMN+", "                  ``-NMMMMMMMMMd-",
-"                     /MMMMMMMMMMMs`", "                      mMMMMMMMsyNMN/", "                      +MMMMMMMo  :sNh.",
-"                      `NMMMMMMm     -o/", "                       oMMMMMMM.", "                       `NMMMMMM+",
-"                        +MMd/NMh", "                         mMm -mN`", "                         /MM  `h:",
-"                          dM`   .", "                          :M-", "                           d:",
-"                           -+", "                            -"
-].join("\n");
-
-ASCII_ARTS.adelie = [
-"                 $3 ,-^-___", "$3                /\\\\\\///", "$2refined.$1       /\\\\\\\\//",
-"$2reliable.$1     /\\\\\\///", "$2ready.$1       /\\\\/////\\", "        __///\\\\\\\\/////\\",
-"$3     _//////\\\\\\\\\\\\///", "$1   ///////$3\\\\\\\\\\\\//", "          //////$1\\\\\\\\/",
-"          /////\\\\\\\\/", "          /////$3\\\\\\\\/", "         /\\///\\\\/",
-"         /\\\\\\/$1\\\\/", "         /\\\\\\\\//", "        //////", "      /// $3\\\\\\\\\\"
-].join("\n");
+// ... (Los 21 ASCII arts se mantienen exactamente igual que en la versión anterior) ...
+ASCII_ARTS.arch = ["                   -`", "                  .o+`", "                 `ooo/", "                `+oooo:", "               `+oooooo:", "               -+oooooo+:", "             `/:-:++oooo+:", "            `/++++/+++++++:", "           `/++++++++++++++:", "          `/+++o$2oooooooo$1oooo/`", "         ./$2ooosssso++osssssso$1+`", "$2       .oossssso-````/ossssss+`", "       -osssssso.      :ssssssso.", "      :osssssss/        osssso+++.", "     /ossssssss/        +ssssooo/-", "   `/ossssso+/:-        -:/+osssso+-", "  `+sso+:-`                 `.-/+oso:", " `++:.                           `-/+", " .`                                 `/"].join("\n");
+ASCII_ARTS.ubuntu = ["                             ....", "              $1.',:clooo:  $2.:looooo:.", "           $1.;looooooooc  $2.oooooooooo'", "        $1.;looooool:,''.  $2:ooooooooooc", "       $1;looool;.         $2'oooooooooo,", "      $1;clool'             $2.cooooooc.  $1,,", "         $1...                $2......  $1.:oo,", "  $2.;clol:,.                        $1.loooo'", " $2:ooooooooo,                        $1'ooool", "$2'ooooooooooo.                        $1loooo.", "$2'ooooooooool                         $1coooo.", " $2,loooooooc.                        $1.loooo.", "   $2.,;;;'.                          $1;ooooc", "       $1...                         $1,ooool.", "    $1.cooooc.              $2..',,'.  $1.cooo.", "      $1;ooooo:.           $2;oooooooc.  $1:l.", "       $1.coooooc,..      $2coooooooooo.", "         $1.:ooooooolc:. $2.ooooooooooo'", "           $1.':loooooo;  $2,oooooooooc", "               $1..';::c'  $2.;loooo:'"].join("\n");
+ASCII_ARTS.debian = ["        $2_,met$$$$$$$$$$gg.", "     ,g$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$P.", "   ,g$$$$P\"\"       \"\"\"Y$$$$.\".", "  ,$$$$P'              `$$$$$$.", "',$$$$P       ,ggs.     `$$$$b:", "`d$$$$'     ,$P\"'   $1.$2    $$$$$$", " $$$$P      d$'     $1,$2    $$$$P", " $$$$:      $$$.   $1-$2    ,d$$$$'", " $$$$;      Y$b._   _,d$P'", " Y$$$$.    $1`.$2`\"Y$$$$$$$$P\"'", " `$$$$b      $1\"-.__", "  $2`Y$$$$b", "   `Y$$$$.", "     `$$$$b.", "       `Y$$$$b.", "         `\"Y$$b._", "             `\"\"\"\""].join("\n");
+ASCII_ARTS.fedora = ["             .',;::::;,'.", "         .';:cccccccccccc:;,.", "      .;cccccccccccccccccccccc;.", "    .:cccccccccccccccccccccccccc:.", "  .;ccccccccccccc;$2.:dddl:.$1;ccccccc;.", " .:ccccccccccccc;$2OWMKOOXMWd$1;ccccccc:.", ".:ccccccccccccc;$2KMMc$1;cc;$2xMMc$1;ccccccc:.", ",cccccccccccccc;$2MMM.$1;cc;$2;WW:$1;cccccccc,", ":cccccccccccccc;$2MMM.$1;cccccccccccccccc:", ":ccccccc;$2oxOOOo$1;$2MMM000k.$1;cccccccccccc:", "cccccc;$20MMKxdd:$1;$2MMMkddc.$1;cccccccccccc;", "ccccc;$2XMO'$1;cccc;$2MMM.$1;cccccccccccccccc'", "ccccc;$2MMo$1;ccccc;$2MMW.$1;ccccccccccccccc;", "ccccc;$20MNc.$1ccc$2.xMMd$1;ccccccccccccccc;", "cccccc;$2dNMWXXXWM0:$1;cccccccccccccc:,", "cccccccc;$2.:odl:.$1;cccccccccccccc:,.", "ccccccccccccccccccccccccccccc:'.", ":ccccccccccccccccccccccc:;,..", " ':cccccccccccccccc::;,."].join("\n");
+ASCII_ARTS.mint = ["MMMMMMMMMMMMMMMMMMMMMMMMMmds.", "MMMMMMMMMMMMMMMMMMMMMMMMNMMMMNNdy.", "MMMMMMMMMMMMMMMMMMMMMMMMNMMMMMMMMNy.", "MMMMMMMM$2................$1MMMMMMMMMMMMM.", "MMMMMMMM$2:dddddddddddddddd$1MMMMMMMMMMMM.", "MMMMMMMM$2:dddddddddddddddd$1MMMMMMMMMMMM.", "MMMMMMMM$2:dddddddddddddddd$1MMMMMMMMMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMMMMMMMMMMMMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMMMMMMMMMMMMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMMMMMMMMMMMMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMM$2:dddddddd$1MMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMM$2......$1MMMMMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMMMMMMMMMMMMMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMMMMMMMMMMMMMMMMMMM$2dddddddd$1MMMMM.", "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM."].join("\n");
+ASCII_ARTS.opensuse = ["           $2.;ldkO0000Okdl;.", "       .;d00xl:^''''''^:ok00d;.", "     .d00l'                'o00d.", "   .d0Kd'$1  Okxol:;,.          $2:O0d", "  .OK$1KKK0kOKKKKKKKKKKOxo:,      $2lKO.", " ,0K$1KKKKKKKKKKKKKKK0P^$2,,,$1^dx:$2    ;00,", ".OK$1KKKKKKKKKKKKKKKk'$2.oOPPb.$1'0k.$2   cKO.", ":KK$1KKKKKKKKKKKKKKK: $2kKx..dd $1lKd$2   'OK:", "dKK$1KKKKKKKKKOx0KKKd $2^0KKKO' $1kKKc$2   dKd", "dKK$1KKKKKKKKKK;.;oOKx,..$2^$1..;kKKK0.$2  dKd", ":KK$1KKKKKKKKKK0o;...^cdxxOK0O/^^'  $2.0K:", " kKK$1KKKKKKKKKKKKK0x;,,......,;od  $2lKk", " '0K$1KKKKKKKKKKKKKKKKKKKK00KKOo^  $2c00'", "  'kK$1KKOxddxkOO00000Okxoc;''   $2.dKk'", "    l0Ko.                    .c00l'", "     'l0Kk:.              .;xK0l'", "        'lkK0xl:;,,,,;:ldO0kl'", "            '^:ldxkkkkxdl:^'"].join("\n");
+ASCII_ARTS.alpine = ["       .hddddddddddddddddddddddh.", "      :dddddddddddddddddddddddddd:", "     /dddddddddddddddddddddddddddd/", "    +dddddddddddddddddddddddddddddd+", "  `sdddddddddddddddddddddddddddddddds`", " `ydddddddddddd++hdddddddddddddddddddy`", ".hddddddddddd+`  `+ddddh:-sdddddddddddh.", "hdddddddddd+`      `+y:    .sddddddddddh", "ddddddddh+`   `//`   `.`     -sddddddddd", "ddddddh+`   `/hddh/`   `:s-    -sddddddd", "ddddh+`   `/+/dddddh/`   `+s-    -sddddd", "ddd+`   `/o` :dddddddh/`   `oy-    .yddd", "hdddyo+ohddyosdddddddddho+oydddy++ohdddh", ".hddddddddddddddddddddddddddddddddddddh.", " `yddddddddddddddddddddddddddddddddddy`", "  `sdddddddddddddddddddddddddddddddds`", "    +dddddddddddddddddddddddddddddd+", "     /dddddddddddddddddddddddddddd/", "      :dddddddddddddddddddddddddd:", "       .hddddddddddddddddddddddh."].join("\n");
+ASCII_ARTS.gentoo = ["         -/oyddmdhs+:.", "     -o$2dNMMMMMMMMNNmhy+$1-`", "   -y$2NMMMMMMMMMMMNNNmmdhy$1+-", " `o$2mMMMMMMMMMMMMNmdmmmmddhhy$1/`", " om$2MMMMMMMMMMMN$1hhyyyo$2hmdddhhhd$1o`", ".y$2dMMMMMMMMMMd$1hs++so/s$2mdddhhhhdm$1+`", " oy$2hdmNMMMMMMMN$1dyooy$2dmddddhhhhyhN$1d.", "  :o$2yhhdNNMMMMMMMNNNmmdddhhhhhyym$1Mh", "    .:$2+sydNMMMMMNNNmmmdddhhhhhhmM$1my", "       /m$2MMMMMMNNNmmmdddhhhhhmMNh$1s:", "    `o$2NMMMMMMMNNNmmmddddhhdmMNhs$1+`", "  `s$2NMMMMMMMMNNNmmmdddddmNMmhs$1/.", " /N$2MMMMMMMMNNNNmmmdddmNMNdso$1:`", "+M$2MMMMMMNNNNNmmmmdmNMNdso$1/-", "yM$2MNNNNNNNmmmmmNNMmhs+/$1-`", "/h$2MMNNNNNNNNMNdhs++/$1-`", "`/$2ohdmmddhys+++/:$1.`", "  `-//////:--."].join("\n");
+ASCII_ARTS.manjaro = ["██████████████████  ████████", "██████████████████  ████████", "██████████████████  ████████", "██████████████████  ████████", "████████            ████████", "████████  ████████  ████████", "████████  ████████  ████████", "████████  ████████  ████████", "████████  ████████  ████████", "████████  ████████  ████████", "████████  ████████  ████████", "████████  ████████  ████████", "████████  ████████  ████████", "████████  ████████  ████████"].join("\n");
+ASCII_ARTS.kali = ["..............", "            ..,;:ccc,.", "          ......''';lxO.", ".....''''..........,:ld;", "           .';;;:::;,,.x,", "      ..'''.            0Xxoc:,.  ...", "  ....                ,ONkc;,;cokOdc',.", " .                   OMo           ':$2dd$1o.", "                    dMc               :OO;", "                    0M.                 .:o.", "                    ;Wd", "                     ;XO,", "                       ,d0Odlc;,..", "                           ..',;:cdOOd::,.", "                                    .:d;.':;.", "                                       'd,  .'", "                                         ;l   ..", "                                          .o", "                                            c", "                                            .'", "                                             ."].join("\n");
+ASCII_ARTS.void_ = ["                __.;=====;.__", "            _.=+==++=++=+=+===;.", "             -=+++=+===+=+=+++++=_", "        .     -=:``     `--==+=++==.", "       _vi,    `            --+=++++:", "      .uvnvi.       _._       -==+==+.", "     .vvnvnI`    .;==|==;.     :|=||=|.", "$2+QmQQm$1pvvnv;$2 _yYsyQQWUUQQQm #QmQ#$1:$2QQQWUV$QQm.", " $2-QQWQW$1pvvo$2wZ?.wQQQE$1==<$2QWWQ/QWQW.QQWW$1(:$2 jQWQE", "  $2-$QQQQmmU'  jQQQ$1@+=<$2QWQQ)mQQQ.mQQQC$1+;$2jWQQ@'", "   $2-$WQ8Y$1nI:$2   QWQQwgQQWV$1`$2mWQQ.jQWQQgyyWW@!", "     $1-1vvnvv.     `~+++`        ++|+++", "      +vnvnnv,                 `-|===", "       +vnvnvns.           .      :=-", "        -Invnvvnsi..___..=sv=.     `", "          +Invnvnvnnnnnnnnvvnn;.", "            ~|Invnvnvvnvvvnnv}+", "               -~|{*l}*|~"].join("\n");
+ASCII_ARTS.nixos = ["          $1▗▄▄▄       $2▗▄▄▄▄    ▄▄▄▖", "          $1▜███▙       $2▜███▙  ▟███▛", "           $1▜███▙       $2▜███▙▟███▛", "            $1▜███▙       $2▜██████▛", "     $1▟█████████████████▙ $2▜████▛     $3▟▙", "    $1▟███████████████████▙ $2▜███▙    $3▟██▙", "           $6▄▄▄▄▖           $2▜███▙  $3▟███▛", "          $6▟███▛             $2▜██▛ $3▟███▛", "         $6▟███▛               $2▜▛ $3▟███▛", "$6▟███████████▛                  $3▟██████████▙", "$6▜██████████▛                  $3▟███████████▛", "      $6▟███▛ $5▟▙               $3▟███▛", "     $6▟███▛ $5▟██▙             $3▟███▛", "    $6▟███▛  $5▜███▙           $3▝▀▀▀▀", "    $6▜██▛    $5▜███▙ $4▜██████████████████▛", "     $6▜▛     $5▟████▙ $4▜████████████████▛", "           $5▟██████▙         $4▜███▙", "          $5▟███▛▜███▙         $4▜███▙", "         $5▟███▛  ▜███▙         $4▜███▙", "         $5▝▀▀▀    ▀▀▀▀▘         $4▀▀▀▘"].join("\n");
+ASCII_ARTS.popos = ["             /////////////", "         /////////////////////", "      ///////$2*767$1////////////////", "    //////$27676767676*$1//////////////", "   /////$276767$1//$27676767$1//////////////", "  /////$2767676$1///$2*76767$1///////////////", " ///////$2767676$1///$276767$1.///$27676*$1///////", "/////////$2767676$1//$276767$1///$2767676$1////////", "//////////$276767676767$1////$276767$1/////////", "///////////$276767676$1//////$27676$1//////////", "////////////,$27676$1,///////$2767$1///////////", "/////////////*$27676$1///////$276$1////////////", "///////////////$27676$1////////////////////", " ///////////////$27676$1///$2767$1////////////", "  //////////////////////$2'$1////////////", "   //////$2.7676767676767676767,$1//////", "    /////$2767676767676767676767$1/////", "      ///////////////////////////", "         /////////////////////", "             /////////////"].join("\n");
+ASCII_ARTS.android = ["         -o          o-", "          +hydNNNNdyh+", "        +mMMMMMMMMMMMMm+", "      `dMM$2m:$1NMMMMMMN$2:m$1MMd`", "      hMMMMMMMMMMMMMMMMMMh", "  ..  yyyyyyyyyyyyyyyyyyyy  ..", ".mMMm`MMMMMMMMMMMMMMMMMMMM`mMMm.", ":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:", ":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:", ":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:", ":MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM:", "-MMMM-MMMMMMMMMMMMMMMMMMMM-MMMM-", " +yy+ MMMMMMMMMMMMMMMMMMMM +yy+", "      mMMMMMMMMMMMMMMMMMMm", "      `/++MMMMh++hMMMM++/`", "          MMMMo  oMMMM", "          MMMMo  oMMMM", "          oNMm-  -mMNs"].join("\n");
+ASCII_ARTS.macos = ["                     ..'", "                 ,xNMM.", "               .OMMMMo", "               lMM\"", "     .;loddo:.  .olloddol;.", "   cKMMMMMMMMMMNWMMMMMMMMMM0:", " $2.KMMMMMMMMMMMMMMMMMMMMMMMWd.", " XMMMMMMMMMMMMMMMMMMMMMMMX.", "$3;MMMMMMMMMMMMMMMMMMMMMMMM:", ":MMMMMMMMMMMMMMMMMMMMMMMM:", "$4.MMMMMMMMMMMMMMMMMMMMMMMMX.", " kMMMMMMMMMMMMMMMMMMMMMMMMWd.", " $5'XMMMMMMMMMMMMMMMMMMMMMMMMMMk", "  'XMMMMMMMMMMMMMMMMMMMMMMMMK.", "    $6kMMMMMMMMMMMMMMMMMMMMMMd", "     ;KMMMMMMMWXXWMMMMMMMk.", "       \"cooc*\"    \"*coo'\"", "                     ..'"].join("\n");
+ASCII_ARTS.parrot = ["  `:oho/-`", "`mMMMMMMMMMMMNmmdhy-", " dMMMMMMMMMMMMMMMMMMs`", " +MMsohNMMMMMMMMMMMMMm/", " .My   .+dMMMMMMMMMMMMMh.", "  +       :NMMMMMMMMMMMMNo", "           `yMMMMMMMMMMMMMm:", "             /NMMMMMMMMMMMMMy`", "              .hMMMMMMMMMMMMMN+", "                  ``-NMMMMMMMMMd-", "                     /MMMMMMMMMMMs`", "                      mMMMMMMMsyNMN/", "                      +MMMMMMMo  :sNh.", "                      `NMMMMMMm     -o/", "                       oMMMMMMM.", "                       `NMMMMMM+", "                        +MMd/NMh", "                         mMm -mN`", "                         /MM  `h:", "                          dM`   .", "                          :M-", "                           d:", "                           -+", "                            -"].join("\n");
+ASCII_ARTS.adelie = ["                 $3 ,-^-___", "$3                /\\\\\\///", "$2refined.$1       /\\\\\\\\//", "$2reliable.$1     /\\\\\\///", "$2ready.$1       /\\\\/////\\", "        __///\\\\\\\\/////\\", "$3     _//////\\\\\\\\\\\\///", "$1   ///////$3\\\\\\\\\\\\//", "          //////$1\\\\\\\\/", "          /////\\\\\\\\/", "          /////$3\\\\\\\\/", "         /\\///\\\\/", "         /\\\\\\/$1\\\\/", "         /\\\\\\\\//", "        //////", "      /// $3\\\\\\\\\\"].join("\n");
 
 // ============================================================
 // COLORES
 // ============================================================
-var ANSI_COLORS = {
-  '30':'#000000','31':'#cc0000','32':'#4e9a06','33':'#c4a000',
-  '34':'#3465a4','35':'#75507b','36':'#06989a','37':'#d3d7cf',
-  '90':'#555753','91':'#ef2929','92':'#8ae234','93':'#fce94f',
-  '94':'#729fcf','95':'#ad7fa8','96':'#34e2e2','97':'#eeeeec'
-};
-
+var ANSI_COLORS = { '30':'#000000','31':'#cc0000','32':'#4e9a06','33':'#c4a000','34':'#3465a4','35':'#75507b','36':'#06989a','37':'#d3d7cf','90':'#555753','91':'#ef2929','92':'#8ae234','93':'#fce94f','94':'#729fcf','95':'#ad7fa8','96':'#34e2e2','97':'#eeeeec' };
+var COLOR_NAMES = ['Negro','Rojo','Verde','Amarillo','Azul','Morado','Cyan','Blanco','Gris','Rojo+','Verde+','Amarillo+','Azul+','Morado+','Cyan+','Blanco+'];
 var LOGO_PALETTE_DEFAULT = ['32','36','33','31','35','34','37','92','96'];
-var THEMES = {
-  arch: ['36','34'], ubuntu: ['31','33'], mint: ['32','37'],
-  fedora: ['34','94'], opensuse: ['32','92'], gentoo: ['35','95'],
-  nixos: ['34','36','35','31','32','94'], popos: ['36','33'],
-  android: ['32','92'], macos: ['37','31','33','32','36','34']
-};
+var THEMES = { arch: ['36','34'], ubuntu: ['31','33'], mint: ['32','37'], fedora: ['34','94'], opensuse: ['32','92'], gentoo: ['35','95'], nixos: ['34','36','35','31','32','94'], popos: ['36','33'], android: ['32','92'], macos: ['37','31','33','32','36','34'] };
 var INFO_STYLE = { user:'#8ae234', at:'#d3d7cf', sep:'#555753', label:'#729fcf', value:'#d3d7cf' };
 
 // ============================================================
 // ESTADO Y PERSISTENCIA
 // ============================================================
-var STORAGE_KEY = 'meow-fwt-v1';
+var STORAGE_KEY = 'meow-fwt-v2';
 var state = {
-  ascii: null,
-  installed: [],
-  presets: {},
-  data: {
-    user:'usuario', host:'iPhone', os:'iOS 17.4',
-    kernel:'Darwin 23.4.0', uptime:'2 hours, 15 mins',
-    shell:'zsh 5.9', terminal:'Meow FWT',
-    cpu:'Apple A17 Pro', memory:'8192MiB / 8192MiB'
-  },
-  customThemes: {},
-  typewriter: true
+  ascii: null, installed: [], presets: {},
+  data: { user:'usuario', host:'iPhone', os:'iOS 17.4', kernel:'Darwin 23.4.0', uptime:'2 hours, 15 mins', shell:'zsh 5.9', terminal:'Meow FWT', cpu:'Apple A17 Pro', memory:'8192MiB / 8192MiB' },
+  customThemes: {}, typewriter: true, liteMode: false,
+  prompt: 'meow@fwt:~$', sound: false
 };
 
 function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      ascii: state.ascii, installed: state.installed, presets: state.presets,
-      data: state.data, customThemes: state.customThemes, typewriter: state.typewriter
-    }));
-  } catch(e) {}
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
 }
 function loadState() {
   try {
     var raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    var p = JSON.parse(raw);
-    if (p.ascii && ASCII_ARTS[p.ascii]) state.ascii = p.ascii;
-    if (p.installed) state.installed = p.installed;
-    if (p.presets) state.presets = p.presets;
-    if (p.data) Object.assign(state.data, p.data);
-    if (p.customThemes) state.customThemes = p.customThemes;
-    if (p.typewriter !== undefined) state.typewriter = p.typewriter;
+    if (raw) {
+      var p = JSON.parse(raw);
+      Object.assign(state, p);
+      if (state.prompt) document.getElementById('promptText').textContent = state.prompt;
+    }
   } catch(e) {}
 }
 
@@ -407,89 +193,23 @@ function loadState() {
 var output = document.getElementById('output');
 var input = document.getElementById('cmdInput');
 var previewBox = document.getElementById('preview-box');
-var history = [];
-var histIndex = -1;
+var history = JSON.parse(localStorage.getItem('meow-fwt-history') || '[]');
+var histIndex = history.length;
 
-function print(text, cls) {
+function print(text, cls, html) {
   var div = document.createElement('div');
   div.className = 'line ' + (cls || '');
-  div.textContent = text;
+  if (html) div.innerHTML = text; else div.textContent = text;
   output.appendChild(div);
-  window.scrollTo(0, document.body.scrollHeight);
+  if (!state.liteMode) window.scrollTo(0, document.body.scrollHeight);
 }
-
-function escapeHTML(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function typewriterPrint(html, cls, callback) {
-  if (!state.typewriter || !html) {
-    var div = document.createElement('div');
-    div.className = 'line ' + (cls || '');
-    div.innerHTML = html;
-    output.appendChild(div);
-    window.scrollTo(0, document.body.scrollHeight);
-    if (callback) callback();
-    return;
-  }
-
-  var div = document.createElement('div');
-  div.className = 'line ' + (cls || '');
-  output.appendChild(div);
-  
-  var temp = document.createElement('div');
-  temp.innerHTML = html;
-  var nodes = Array.from(temp.childNodes);
-  var nodeIndex = 0;
-  var charIndex = 0;
-  
-  function processNextNode() {
-    if (nodeIndex >= nodes.length) {
-      if (callback) callback();
-      return;
-    }
-    var node = nodes[nodeIndex];
-    if (node.nodeType === 3) {
-      if (charIndex < node.textContent.length) {
-        div.appendChild(document.createTextNode(node.textContent[charIndex]));
-        charIndex++;
-        window.scrollTo(0, document.body.scrollHeight);
-        setTimeout(processNextNode, 1);
-      } else {
-        nodeIndex++;
-        charIndex = 0;
-        processNextNode();
-      }
-    } else {
-      var clone = node.cloneNode(false);
-      div.appendChild(clone);
-      var spanText = node.textContent;
-      if (spanText.length > 0) {
-        var spanChar = 0;
-        function processSpan() {
-          if (spanChar < spanText.length) {
-            clone.textContent += spanText[spanChar];
-            spanChar++;
-            window.scrollTo(0, document.body.scrollHeight);
-            setTimeout(processSpan, 1);
-          } else {
-            nodeIndex++;
-            charIndex = 0;
-            processNextNode();
-          }
-        }
-        processSpan();
-      } else {
-        nodeIndex++;
-        processNextNode();
-      }
-    }
-  }
-  processNextNode();
-}
+function printHTML(html) { print(html, '', true); }
+function escapeHTML(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function beep() { if (state.sound && !state.liteMode) { try { var ctx = new (window.AudioContext||window.webkitAudioContext)(); var o = ctx.createOscillator(); o.connect(ctx.destination); o.frequency.value = 800; o.start(); o.stop(ctx.currentTime + 0.05); } catch(e){} } }
+function haptic() { if (navigator.vibrate) navigator.vibrate(10); }
 
 // ============================================================
-// BUILD
+// BUILD LOGIC
 // ============================================================
 function getPalette(name) { return state.customThemes[name] || THEMES[name] || LOGO_PALETTE_DEFAULT; }
 function stripPlaceholders(s) { return s.replace(/\$\d/g, ''); }
@@ -499,40 +219,34 @@ function colorizeLogo(text, palette) {
   html = html.replace(/\$(\d)/g, function(m, n) {
     var idx = parseInt(n, 10) - 1;
     var code = palette[idx] || '37';
-    var hex = ANSI_COLORS[code] || '#d3d7cf';
-    return '</span><span style="color:' + hex + '">';
+    return '</span><span style="color:' + (ANSI_COLORS[code] || '#d3d7cf') + '">';
   });
   return '<span style="color:' + ANSI_COLORS['37'] + '">' + html + '</span>';
 }
+function infoLine(label, value) { return '<span style="color:' + INFO_STYLE.label + '">' + escapeHTML(label) + '</span><span style="color:' + INFO_STYLE.value + '">: ' + escapeHTML(value) + '</span>'; }
 
-function infoLine(label, value) {
-  return '<span style="color:' + INFO_STYLE.label + '">' + escapeHTML(label) + '</span>' +
-         '<span style="color:' + INFO_STYLE.value + '">: ' + escapeHTML(value) + '</span>';
-}
-
-function getInfoLines() {
+function getInfoLines(compact) {
   var d = state.data;
-  return [
-    '<span style="color:' + INFO_STYLE.user + '">' + escapeHTML(d.user) + '</span>' +
-    '<span style="color:' + INFO_STYLE.at + '">@</span>' +
-    '<span style="color:' + INFO_STYLE.user + '">' + escapeHTML(d.host) + '</span>',
-    '<span style="color:' + INFO_STYLE.sep + '">-------------------</span>',
-    infoLine('OS', d.os), infoLine('Host', d.host), infoLine('Kernel', d.kernel),
-    infoLine('Uptime', d.uptime), infoLine('Shell', d.shell), infoLine('Terminal', d.terminal),
-    infoLine('CPU', d.cpu), infoLine('Memory', d.memory)
+  var base = [
+    '<span style="color:' + INFO_STYLE.user + '">' + escapeHTML(d.user) + '</span><span style="color:' + INFO_STYLE.at + '">@</span><span style="color:' + INFO_STYLE.user + '">' + escapeHTML(d.host) + '</span>',
+    '<span style="color:' + INFO_STYLE.sep + '">-------------------</span>'
   ];
+  if (compact) {
+    return base.concat([ infoLine('OS', d.os), infoLine('Host', d.host), infoLine('Uptime', d.uptime), infoLine('Shell', d.shell) ]);
+  }
+  return base.concat([
+    infoLine('OS', d.os), infoLine('Host', d.host), infoLine('Kernel', d.kernel), infoLine('Uptime', d.uptime),
+    infoLine('Shell', d.shell), infoLine('Terminal', d.terminal), infoLine('CPU', d.cpu), infoLine('Memory', d.memory)
+  ]);
 }
 
-function buildFastfetchHTML(asciiName) {
+function buildFastfetchHTML(asciiName, compact, noInfo) {
   var artLines = ASCII_ARTS[asciiName].split('\n');
   var palette = getPalette(asciiName);
-  var infoLines = getInfoLines();
+  var infoLines = noInfo ? [] : getInfoLines(compact);
   var maxLines = Math.max(artLines.length, infoLines.length);
   var artWidth = 0;
-  for (var i = 0; i < artLines.length; i++) {
-    var w = stripPlaceholders(artLines[i]).length;
-    if (w > artWidth) artWidth = w;
-  }
+  for (var i = 0; i < artLines.length; i++) { var w = stripPlaceholders(artLines[i]).length; if (w > artWidth) artWidth = w; }
   var html = '';
   for (var j = 0; j < maxLines; j++) {
     var raw = artLines[j] || '';
@@ -548,12 +262,7 @@ function buildFastfetchHTML(asciiName) {
 function buildFastfetchPlainText() {
   var d = state.data;
   var artLines = ASCII_ARTS[state.ascii].split('\n').map(stripPlaceholders);
-  var infoLines = [
-    d.user + '@' + d.host, '-------------------',
-    'OS: ' + d.os, 'Host: ' + d.host, 'Kernel: ' + d.kernel,
-    'Uptime: ' + d.uptime, 'Shell: ' + d.shell, 'Terminal: ' + d.terminal,
-    'CPU: ' + d.cpu, 'Memory: ' + d.memory
-  ];
+  var infoLines = [ d.user + '@' + d.host, '-------------------', 'OS: '+d.os, 'Host: '+d.host, 'Kernel: '+d.kernel, 'Uptime: '+d.uptime, 'Shell: '+d.shell, 'Terminal: '+d.terminal, 'CPU: '+d.cpu, 'Memory: '+d.memory ];
   var maxLines = Math.max(artLines.length, infoLines.length);
   var artWidth = 0;
   for (var i = 0; i < artLines.length; i++) { if (artLines[i].length > artWidth) artWidth = artLines[i].length; }
@@ -566,10 +275,7 @@ function buildFastfetchPlainText() {
   return out;
 }
 
-function renderPreview() {
-  previewBox.innerHTML = buildFastfetchHTML(state.ascii);
-  previewBox.style.display = 'block';
-}
+function renderPreview() { previewBox.innerHTML = buildFastfetchHTML(state.ascii); previewBox.style.display = 'block'; }
 
 // ============================================================
 // COMANDOS
@@ -577,531 +283,443 @@ function renderPreview() {
 var commands = {};
 
 commands.help = function() {
-  print('Comandos de Meow FWT:', 'dim');
-  print('  help                                  - Muestra esta ayuda');
-  print('  list-ascii                            - Lista los ASCII del repositorio');
-  print('  fastfetch | neofetch                  - Muestra el logo y datos en consola');
-  print('  ascii <nombre>                        - Imprime solo el logo (sin instalarlo)');
-  print('  sudo meow add <nombre|random>         - Instala/descarga un ASCII');
-  print('  sudo meow gen <txt|png|pdf>           - Genera y exporta el archivo');
-  print('  sudo meow list                        - Lista ASCII instalados');
-  print('  sudo meow status                      - Muestra el ASCII actual');
-  print('  sudo meow save <nombre>               - Guarda preset actual');
-  print('  sudo meow load <nombre>               - Carga preset');
-  print('  sudo meow presets                     - Lista presets guardados');
-  print('  set <campo> <valor>                   - Configura un dato');
-  print('  fields                                - Lista los campos configurables');
-  print('  preview                               - Previsualiza el resultado en recuadro');
-  print('  share <png|txt>                       - Comparte vía Web Share API (iOS)');
-  print('  theme                                 - Ver temas configurados');
-  print('  theme <ascii> <c1> [c2...]            - Cambiar paleta de un ASCII');
-  print('  theme reset <ascii>                   - Resetear paleta de un ASCII');
-  print('  settings typewriter <on|off>          - Activa/desactiva el efecto typewriter');
-  print('  reset                                 - Borrar config guardada');
-  print('  clear                                 - Limpia la terminal');
+  print('Comandos de Meow FWT v2.0:', 'dim');
+  print('  help, doctor, matrix, cowsay, fortune, top, weather', 'cyan');
+  print('  fastfetch [--compact|--off], neofetch, ascii <nombre>', 'cyan');
+  print('  sudo meow add <nombre|random> | gen <txt|png|pdf> | list | status', 'cyan');
+  print('  sudo meow save <n> | load <n> | presets | remove <ascii> | backup | restore', 'cyan');
+  print('  sudo meow preset rename <viejo> <nuevo> | diff <p1> <p2>', 'cyan');
+  print('  meow (alias rápido de sudo meow)', 'cyan');
+  print('  set <campo> <valor> | set prefix "<txt>" | set --interactive', 'cyan');
+  print('  theme | theme picker | theme rainbow <ascii> | theme reset <ascii>', 'cyan');
+  print('  prompt <classic|minimal|emoji|hacker> | settings typewriter <on|off> | settings lite <on|off> | settings sound <on|off>', 'cyan');
+  print('  export all | copy text | share all | share url | share qr', 'cyan');
+  print('  ls, cd <dir>, pwd, clear, reset', 'cyan');
 };
 
-commands['list-ascii'] = function() {
-  print('ASCII disponibles en el repositorio:', 'dim');
-  Object.keys(ASCII_ARTS).forEach(function(k) { print('  • ' + k); });
-  print('Usa: sudo meow add <nombre>', 'dim');
-};
-
-commands.fields = function() {
-  print('Campos configurables (set <campo> <valor>):', 'dim');
-  Object.keys(state.data).forEach(function(k) { print('  • ' + k); });
-};
+commands['list-ascii'] = function() { print('ASCII disponibles:', 'dim'); Object.keys(ASCII_ARTS).forEach(function(k) { print('  • ' + k); }); print('Usa: sudo meow add <nombre>', 'dim'); };
+commands.fields = function() { print('Campos configurables:', 'dim'); Object.keys(state.data).forEach(function(k) { print('  • ' + k); }); };
 
 commands.set = function(args) {
-  var key = args[0];
-  var value = args.slice(1).join(' ');
+  if (args[0] === '--interactive') {
+    var keys = Object.keys(state.data); var i = 0;
+    function askNext() {
+      if (i >= keys.length) { saveState(); print('✓ Configuración guardada.', 'success'); return; }
+      var k = keys[i];
+      print('Valor para ' + k + ' (Enter para mantener "' + state.data[k] + '"):', 'warn');
+      var handler = function(e) {
+        if (e.key === 'Enter') {
+          input.removeEventListener('keydown', handler);
+          var v = input.value; input.value = ''; print(v);
+          if (v.trim()) state.data[k] = v.trim();
+          i++; askNext();
+        }
+      };
+      input.addEventListener('keydown', handler);
+    }
+    askNext();
+    return;
+  }
+  if (args[0] === 'prefix') {
+    var txt = args.slice(1).join(' ');
+    if (!txt) return print('Uso: set prefix "<texto>"', 'error');
+    state.prompt = txt; document.getElementById('promptText').textContent = txt; saveState();
+    print('✓ Prompt cambiado a: ' + txt, 'success'); return;
+  }
+  var key = args[0]; var value = args.slice(1).join(' ');
   if (!key || !value) return print('Uso: set <campo> <valor>', 'error');
-  if (!(key in state.data)) return print('Campo "' + key + '" no existe. Usa fields.', 'error');
-  state.data[key] = value;
-  saveState();
-  print('✓ ' + key + ' = ' + value, 'success');
+  if (!(key in state.data)) return print('Campo "' + key + '" no existe.', 'error');
+  state.data[key] = value; saveState(); print('✓ ' + key + ' = ' + value, 'success');
 };
 
-commands.fastfetch = function() {
-  if (!state.ascii) return print('No hay ASCII cargado. Usa: sudo meow add <nombre>', 'error');
+commands.fastfetch = function(args) { commands.neofetch(args); };
+commands.neofetch = function(args) {
+  if (!state.ascii) return print('No hay ASCII cargado.', 'error');
+  var compact = args.indexOf('--compact') > -1;
+  var off = args.indexOf('--off') > -1;
   print('');
-  var html = buildFastfetchHTML(state.ascii);
-  typewriterPrint(html);
+  var html = buildFastfetchHTML(state.ascii, compact, off);
+  if (state.liteMode || !state.typewriter) printHTML(html);
+  else typewriterPrint(html);
 };
-commands.neofetch = commands.fastfetch;
 
 commands.ascii = function(args) {
-  var name = args[0];
-  if (!name || !ASCII_ARTS[name]) return print('Uso: ascii <nombre>. Prueba list-ascii.', 'error');
+  var name = args[0]; if (!name || !ASCII_ARTS[name]) return print('Uso: ascii <nombre>', 'error');
   print('');
   var palette = getPalette(name);
-  var artLines = ASCII_ARTS[name].split('\n');
   var html = '';
-  artLines.forEach(function(line) {
-    html += '<div class="ff-line"><span class="ff-art">' + colorizeLogo(line, palette) + '</span></div>';
-  });
-  typewriterPrint(html);
+  ASCII_ARTS[name].split('\n').forEach(function(line) { html += '<div class="ff-line"><span class="ff-art">' + colorizeLogo(line, palette) + '</span></div>'; });
+  if (state.liteMode) printHTML(html); else typewriterPrint(html);
 };
 
-commands.preview = function() {
-  if (!state.ascii) return print('Primero instala un ASCII: sudo meow add <nombre>', 'error');
-  renderPreview();
-  print('Previsualización generada abajo ↓', 'dim');
-};
-
-commands.share = function(args) {
-  var type = args[0];
-  if (!state.ascii) return print('No hay ASCII cargado.', 'error');
-  if (!navigator.share) return print('Web Share API no soportada en este navegador.', 'warn');
-
-  if (type === 'txt') {
-    var text = buildFastfetchPlainText();
-    navigator.share({ title: 'Meow FWT', text: text }).catch(function(){});
-  } else if (type === 'png') {
-    renderPreview();
-    if (typeof html2canvas !== 'function') return print('Librería PNG no cargada.', 'error');
-    html2canvas(previewBox, { backgroundColor: '#161b22', scale: 2 }).then(function(canvas) {
-      canvas.toBlob(function(blob) {
-        var file = new File([blob], 'meow-fwt.png', { type: 'image/png' });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          navigator.share({ files: [file], title: 'Meow FWT' }).catch(function(){});
-        } else {
-          print('Tu navegador no soporta compartir archivos. Usa: sudo meow gen png', 'warn');
-        }
-      });
-    });
-  } else {
-    print('Uso: share <png|txt>', 'error');
-  }
-};
+commands.preview = function() { if (!state.ascii) return print('No hay ASCII cargado.', 'error'); renderPreview(); print('Previsualización abajo ↓', 'dim'); };
 
 commands.theme = function(args) {
   if (args.length === 0) {
     print('Temas configurados:', 'dim');
     Object.keys(ASCII_ARTS).forEach(function(name) {
-      var pal = getPalette(name);
-      var src = state.customThemes[name] ? 'custom' : (THEMES[name] ? 'default' : 'fallback');
-      print('  • ' + (name + '            ').slice(0, 12) + ' [' + pal.join(', ') + ']  (' + src + ')');
+      var pal = getPalette(name); var src = state.customThemes[name] ? 'custom' : (THEMES[name] ? 'default' : 'fallback');
+      print('  • ' + (name + '            ').slice(0, 12) + ' [' + pal.join(', ') + '] (' + src + ')');
     });
-    print('', 'dim');
-    print('Cambiar:  theme <ascii> <c1> [c2...]', 'dim');
-    print('Resetear: theme reset <ascii>', 'dim');
     return;
+  }
+  if (args[0] === 'picker') {
+    print('Selecciona un color (toca el número):', 'dim');
+    var html = '<div class="color-grid">';
+    for (var i = 30; i <= 37; i++) html += '<div class="color-swatch" style="background:'+ANSI_COLORS[i]+'; color:'+(i>33?'#000':'#fff')+'" onclick="window.setSwatch(\''+i+'\')">'+i+'<br>'+COLOR_NAMES[i-30]+'</div>';
+    for (var j = 90; j <= 97; j++) html += '<div class="color-swatch" style="background:'+ANSI_COLORS[j]+'; color:'+(j>93?'#000':'#fff')+'" onclick="window.setSwatch(\''+j+'\')">'+j+'<br>'+COLOR_NAMES[j-90+8]+'</div>';
+    html += '</div><div class="dim">Usa: theme ' + (state.ascii || 'arch') + ' <num1> <num2>...</div>';
+    printHTML(html);
+    return;
+  }
+  if (args[0] === 'rainbow') {
+    var name = args[1] || state.ascii;
+    if (!name || !ASCII_ARTS[name]) return print('Uso: theme rainbow <ascii>', 'error');
+    var rainbow = ['31','33','32','36','34','35','91','93','92','96','94','95'];
+    var colors = [];
+    var placeholders = ASCII_ARTS[name].match(/\$\d/g) || [];
+    var maxP = 0; placeholders.forEach(function(p){ var n=parseInt(p[1]); if(n>maxP)maxP=n; });
+    for(var i=0;i<maxP;i++) colors.push(rainbow[i % rainbow.length]);
+    state.customThemes[name] = colors; saveState();
+    print('✓ Tema rainbow aplicado a ' + name, 'success'); return;
   }
   if (args[0] === 'reset') {
-    var n = args[1];
-    if (!n || !ASCII_ARTS[n]) return print('Uso: theme reset <ascii>', 'error');
-    delete state.customThemes[n];
-    saveState();
-    print('✓ Tema de ' + n + ' reseteado.', 'success');
-    return;
+    delete state.customThemes[args[1]]; saveState(); print('✓ Tema reseteado.', 'success'); return;
   }
-  var name = args[0];
-  var colors = args.slice(1);
-  if (!ASCII_ARTS[name]) return print('ASCII "' + name + '" no existe.', 'error');
-  if (colors.length === 0) return print('Uso: theme <ascii> <c1> [c2...]', 'error');
-  for (var i = 0; i < colors.length; i++) {
-    if (!/^(3[0-7]|9[0-7])$/.test(colors[i])) return print('Color inválido: ' + colors[i], 'error');
-  }
-  state.customThemes[name] = colors;
-  saveState();
-  print('✓ Tema de ' + name + ' actualizado: [' + colors.join(', ') + ']', 'success');
+  var name = args[0]; var colors = args.slice(1);
+  if (!ASCII_ARTS[name] || colors.length === 0) return print('Uso: theme <ascii> <c1> [c2...]', 'error');
+  state.customThemes[name] = colors; saveState(); print('✓ Tema actualizado.', 'success');
+};
+window.setSwatch = function(code) { if(state.ascii) input.value = 'theme ' + state.ascii + ' ' + code; };
+
+commands.prompt = function(args) {
+  var type = args[0];
+  if (type === 'classic') state.prompt = 'meow@fwt:~$';
+  else if (type === 'minimal') state.prompt = '$';
+  else if (type === 'emoji') state.prompt = '🐱 >';
+  else if (type === 'hacker') state.prompt = 'root@null:~#';
+  else return print('Uso: prompt <classic|minimal|emoji|hacker>', 'error');
+  document.getElementById('promptText').textContent = state.prompt; saveState();
+  print('✓ Prompt actualizado.', 'success');
 };
 
 commands.settings = function(args) {
-  if (args[0] === 'typewriter' && args[1]) {
-    state.typewriter = (args[1] === 'on');
-    saveState();
-    print('✓ Efecto typewriter ' + (state.typewriter ? 'activado' : 'desactivado') + '.', 'success');
+  if (args[0] === 'typewriter' && args[1]) { state.typewriter = (args[1]==='on'); saveState(); print('✓ Typewriter ' + args[1], 'success'); return; }
+  if (args[0] === 'lite' && args[1]) { state.liteMode = (args[1]==='on'); saveState(); print('✓ Modo lite ' + args[1], 'success'); return; }
+  if (args[0] === 'sound' && args[1]) { state.sound = (args[1]==='on'); saveState(); print('✓ Sonido ' + args[1], 'success'); return; }
+  print('Uso: settings <typewriter|lite|sound> <on|off>', 'dim');
+};
+
+commands.doctor = function() {
+  print('Diagnóstico del sistema:', 'dim');
+  print('[ OK ] localStorage disponible', 'success');
+  print('[ ' + (typeof html2canvas==='function'?'OK':'WARN') + ' ] CDN html2canvas ' + (typeof html2canvas==='function'?'cargado':'fallido'), typeof html2canvas==='function'?'success':'warn');
+  print('[ ' + (window.jspdf?'OK':'WARN') + ' ] CDN jsPDF ' + (window.jspdf?'cargado':'fallido'), window.jspdf?'success':'warn');
+  print('[ OK ] ' + Object.keys(ASCII_ARTS).length + ' ASCII disponibles', 'success');
+  print('[ ' + (state.typewriter?'WARN':'OK') + ' ] Efecto typewriter ' + (state.typewriter?'activo (ralentiza render)':'desactivado'), state.typewriter?'warn':'success');
+  print('[ ' + (state.liteMode?'OK':'WARN') + ' ] Modo lite ' + (state.liteMode?'activo':'inactivo'), state.liteMode?'success':'warn');
+};
+
+commands.ls = function() {
+  print('Directorio actual:', 'dim');
+  print('ascii/    presets/    config.json    README.md');
+};
+commands.cd = function(args) {
+  if (!args[0] || args[0]==='~' || args[0]==='ascii' || args[0]==='presets') print('Directorio cambiado a /' + (args[0]||'home'), 'success');
+  else print('cd: no existe el directorio: ' + args[0], 'error');
+};
+commands.pwd = function() { print('/home/meow'); };
+
+commands.export = function(args) {
+  if (!state.ascii) return print('No hay ASCII cargado.', 'error');
+  var type = args[0];
+  if (type === 'all') {
+    exportTxt(); setTimeout(exportPng, 500); setTimeout(exportPdf, 1000);
+    print('Generando todos los formatos...', 'dim');
+  } else if (['png','txt','pdf'].indexOf(type) > -1) {
+    renderPreview(); setTimeout(function(){ if(type==='txt')exportTxt(); if(type==='png')exportPng(); if(type==='pdf')exportPdf(); }, 100);
+  } else print('Uso: export <txt|png|pdf|all>', 'error');
+};
+
+commands.copy = function(args) {
+  if (args[0] === 'text') {
+    var text = buildFastfetchPlainText();
+    navigator.clipboard.writeText(text).then(function(){ print('✓ Texto copiado al portapapeles.', 'success'); }).catch(function(){ print('Error al copiar.', 'error'); });
+  } else print('Uso: copy text', 'dim');
+};
+
+commands.share = function(args) {
+  if (!state.ascii) return print('No hay ASCII cargado.', 'error');
+  if (!navigator.share) return print('Web Share API no soportada.', 'warn');
+  var type = args[0];
+  
+  if (type === 'url') {
+    var b64 = btoa(encodeURIComponent(JSON.stringify({a:state.ascii, d:state.data, t:state.customThemes, p:state.prompt})));
+    var url = window.location.origin + window.location.pathname + '#config=' + b64;
+    navigator.clipboard.writeText(url).then(function(){ print('✓ URL copiada: ' + url.substring(0, 50) + '...', 'success'); });
+  } else if (type === 'qr') {
+    var b64 = btoa(encodeURIComponent(JSON.stringify({a:state.ascii, d:state.data, t:state.customThemes})));
+    var url = window.location.origin + window.location.pathname + '#config=' + b64;
+    print('Escanea para cargar tu setup:', 'dim');
+    printHTML('<div class="qr-container" id="qrbox"></div>');
+    new QRCode(document.getElementById("qrbox"), { text: url, width: 150, height: 150 });
+  } else if (type === 'all' || type === 'txt') {
+    navigator.share({ title: 'Meow FWT', text: buildFastfetchPlainText() }).catch(function(){});
+  } else if (type === 'png') {
+    renderPreview();
+    html2canvas(previewBox, { backgroundColor: '#161b22', scale: 2 }).then(function(canvas) {
+      canvas.toBlob(function(blob) {
+        var file = new File([blob], 'meow-fwt.png', { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: 'Meow FWT' }).catch(function(){});
+        else print('No se pueden compartir archivos. Usa: export png', 'warn');
+      });
+    });
+  } else print('Uso: share <txt|png|url|qr|all>', 'dim');
+};
+
+commands.meow = function(args) { commands.sudo(['meow'].concat(args)); };
+
+commands.sudo = function(args) {
+  if (args[0] === 'rm' && args[1] === '-rf' && args[2] === '/') return print('Nice try 😏', 'warn');
+  if (args[0] !== 'meow') return print('sudo: comando no permitido. Usa "sudo meow" o solo "meow".', 'error');
+  var action = args[1]; var rest = args.slice(2);
+  if (!action) return print('¿Meow? 🐱 Acciones: add, gen, list, status, save, load, presets, remove, backup, restore, preset, diff', 'dim');
+
+  if (action === 'add') {
+    var name = rest[0];
+    if (name === 'random') { var keys = Object.keys(ASCII_ARTS); name = keys[Math.floor(Math.random()*keys.length)]; print('Aleatorio: ' + name, 'success'); }
+    if (!ASCII_ARTS[name]) return print('ASCII no existe.', 'error');
+    print('[sudo] Descargando ' + name + '...', 'dim');
+    var bar = document.createElement('div'); bar.className = 'line progress'; output.appendChild(bar);
+    var pct = 0; var intv = setInterval(function() {
+      pct += 20; if (pct > 100) pct = 100;
+      bar.textContent = '  [' + new Array(Math.round(pct/5)+1).join('█') + new Array(20-Math.round(pct/5)+1).join('░') + '] ' + Math.round(pct) + '%';
+      window.scrollTo(0, document.body.scrollHeight);
+      if (pct >= 100) { clearInterval(intv); state.ascii = name; if (state.installed.indexOf(name)===-1) state.installed.push(name); saveState(); print('✓ Instalado.', 'success'); beep(); }
+    }, 30);
     return;
   }
-  print('Uso: settings typewriter <on|off>', 'dim');
+  if (action === 'gen') {
+    var type = rest[0]; if (!type) return print('Uso: gen <txt|png|pdf>', 'error');
+    if (!state.ascii) return print('No hay ASCII cargado.', 'error');
+    print('[sudo] Generando ' + type + '...', 'dim'); renderPreview();
+    setTimeout(function(){ if(type==='txt')exportTxt(); if(type==='png')exportPng(); if(type==='pdf')exportPdf(); }, 300);
+    return;
+  }
+  if (action === 'list') { if(!state.installed.length)return print('No hay instalados.','warn'); print('Instalados:','dim'); state.installed.forEach(function(k){ print('  • '+k+(k===state.ascii?' (activo)':'')); }); return; }
+  if (action === 'status') { if(!state.ascii)return print('Ningún ASCII activo.','warn'); print('Activo: ' + state.ascii, 'success'); return; }
+  
+  if (action === 'save') {
+    var pName = rest[0]; if(!pName)return print('Uso: save <nombre>','error');
+    state.presets[pName] = { ascii: state.ascii, data: JSON.parse(JSON.stringify(state.data)), customThemes: JSON.parse(JSON.stringify(state.customThemes)) };
+    saveState(); print('✓ Preset guardado: ' + pName, 'success'); return;
+  }
+  if (action === 'load') {
+    var pName = rest[0]; if(!state.presets[pName])return print('Preset no encontrado.','error');
+    Object.assign(state, state.presets[pName]); saveState(); print('✓ Preset cargado.','success'); commands.fastfetch(); return;
+  }
+  if (action === 'presets') {
+    var keys = Object.keys(state.presets); if(!keys.length)return print('No hay presets.','warn');
+    keys.forEach(function(k){ print('  • '+k+' (ASCII: '+state.presets[k].ascii+')'); }); return;
+  }
+  if (action === 'remove') {
+    var n = rest[0]; var idx = state.installed.indexOf(n);
+    if(idx>-1){ state.installed.splice(idx,1); saveState(); print('✓ Removido: '+n,'success'); } else print('No instalado.','error'); return;
+  }
+  if (action === 'backup') {
+    var dataStr = JSON.stringify(state);
+    downloadBlob(new Blob([dataStr], {type:'application/json'}), 'meow-backup.json');
+    print('✓ Backup descargado.', 'success'); return;
+  }
+  if (action === 'restore') {
+    print('Pega el JSON de backup en el input y presiona Enter.', 'warn');
+    var handler = function(e) {
+      if (e.key === 'Enter') {
+        input.removeEventListener('keydown', handler);
+        try { var p = JSON.parse(input.value); Object.assign(state, p); saveState(); print('✓ Restaurado.','success'); location.reload(); } 
+        catch(err) { print('JSON inválido.', 'error'); }
+        input.value = '';
+      }
+    };
+    input.addEventListener('keydown', handler); return;
+  }
+  if (action === 'preset') {
+    if (rest[0]==='rename') {
+      var o = rest[1], n = rest[2];
+      if(state.presets[o]) { state.presets[n]=state.presets[o]; delete state.presets[o]; saveState(); print('✓ Renombrado.','success'); }
+      else print('No existe el preset.','error');
+    }
+    return;
+  }
+  if (action === 'diff') {
+    var p1 = state.presets[rest[0]], p2 = state.presets[rest[1]];
+    if(!p1||!p2)return print('Presets no encontrados.','error');
+    print('Diferencias:', 'dim');
+    Object.keys(p1.data).forEach(function(k){ if(p1.data[k]!==p2.data[k]) print('  ' + k + ': "'+p1.data[k]+'" -> "'+p2.data[k]+'"', 'warn'); });
+    return;
+  }
+  print('Acción no reconocida.', 'error');
 };
 
-commands.reset = function() {
-  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
-  state.ascii = null;
-  state.installed = [];
-  state.presets = {};
-  state.customThemes = {};
-  state.data = {
-    user:'usuario', host:'iPhone', os:'iOS 17.4', kernel:'Darwin 23.4.0',
-    uptime:'2 hours, 15 mins', shell:'zsh 5.9', terminal:'Meow FWT',
-    cpu:'Apple A17 Pro', memory:'8192MiB / 8192MiB'
-  };
-  previewBox.style.display = 'none';
-  print('✓ Configuración borrada.', 'success');
-};
-
-commands.clear = function() {
-  output.innerHTML = '';
-  previewBox.style.display = 'none';
+commands.fortune = function() {
+  var frases = ["No es un bug, es una característica.", "Funciona en mi máquina.", "El café es un lenguaje de programación.", "Los comentarios mienten.", "Meow FWT es el futuro."];
+  print('🥠 ' + frases[Math.floor(Math.random()*frases.length)], 'cyan');
 };
 
 commands.matrix = function() {
   print('Wake up, Neo...', 'success');
-  var chars = '01ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*';
-  var interval = setInterval(function() {
-    var str = '';
-    for (var i = 0; i < 50; i++) {
-      str += chars[Math.floor(Math.random() * chars.length)];
-    }
-    print(str, 'success');
-  }, 50);
-  setTimeout(function() { clearInterval(interval); print('El sistema te ha liberado.', 'dim'); }, 1500);
+  var intv = setInterval(function() { var s=''; for(var i=0;i<40;i++) s+='01ABCDEF'[Math.floor(Math.random()*8)]; print(s, 'success'); }, 40);
+  setTimeout(function(){ clearInterval(intv); print('El sistema te ha liberado.', 'dim'); }, 1200);
 };
 
-commands.cowsay = function(args) {
-  var text = args.join(' ') || 'Muuuu';
-  var border = ' ' + new Array(text.length + 3).join('-') + ' ';
-  print(' ' + new Array(text.length + 3).join('-'));
+commands.cowsay = commands.cat = function(args) {
+  var text = args.join(' ') || 'Muuu... o mejor dicho, Miau 🐱';
+  print(' ' + new Array(text.length+3).join('-'));
   print('< ' + text + ' >');
-  print(' ' + new Array(text.length + 3).join('-'));
-  print('        \\   ^__^');
-  print('         \\  (oo)\\_______');
-  print('            (__)\\       )\\/\\');
-  print('                ||----w |');
-  print('                ||     ||');
+  print(' ' + new Array(text.length+3).join('-'));
+  print('        \\   /\\_/\\');
+  print('         \\  ( o.o )');
+  print('            > ^ <');
 };
 
-// ============================================================
-// EL COMANDO MAESTRO: sudo
-// ============================================================
-commands.sudo = function(args) {
-  if (args[0] === 'rm' && args[1] === '-rf' && args[2] === '/') {
-    return print('Nice try 😏 Pero este sistema es a prueba de balas.', 'warn');
-  }
-
-  if (args[0] !== 'meow') {
-    return print('sudo: comando no permitido. Usa "sudo meow <acción>".', 'error');
-  }
-
-  var action = args[1];
-  var rest = args.slice(2);
-
-  if (!action) {
-    print('¿Meow? 🐱 Usa: sudo meow <acción> [args]', 'warn');
-    print('Acciones: add, gen, list, status, save, load, presets', 'dim');
-    return;
-  }
-
-  if (action === 'add') {
-    var name = rest[0];
-    if (!name) return print('Uso: sudo meow add <nombre|random>', 'error');
-    
-    if (name === 'random') {
-      var keys = Object.keys(ASCII_ARTS);
-      name = keys[Math.floor(Math.random() * keys.length)];
-      print('¡Aleatorio elegido: ' + name + '!', 'success');
-    }
-    
-    if (!ASCII_ARTS[name]) return print('ASCII "' + name + '" no existe. Prueba list-ascii.', 'error');
-
-    print('[sudo] password for usuario: ********', 'dim');
-    print('Descargando ' + name + '...');
-
-    var bar = document.createElement('div');
-    bar.className = 'line progress';
-    output.appendChild(bar);
-
-    var pct = 0;
-    var interval = setInterval(function() {
-      pct += 10;
-      if (pct > 100) pct = 100;
-      var filled = Math.round(pct / 5);
-      var empty = 20 - filled;
-      var speed = (Math.random() * 4 + 1).toFixed(1);
-      bar.textContent = '  [' + new Array(filled+1).join('█') + new Array(empty+1).join('░') + '] ' + Math.round(pct) + '%  ' + speed + ' MB/s';
-      window.scrollTo(0, document.body.scrollHeight);
-      if (pct >= 100) {
-        clearInterval(interval);
-        state.ascii = name;
-        if (state.installed.indexOf(name) === -1) state.installed.push(name);
-        saveState();
-        print('✓ ' + name + ' instalado y cargado en la sesión.', 'success');
-      }
-    }, 40);
-    return;
-  }
-
-  if (action === 'list') {
-    if (state.installed.length === 0) return print('No hay ASCII instalados. Usa: sudo meow add <nombre>', 'warn');
-    print('ASCII instalados:', 'dim');
-    state.installed.forEach(function(k) {
-      var marker = (k === state.ascii) ? ' (activo)' : '';
-      print('  • ' + k + marker);
-    });
-    return;
-  }
-
-  if (action === 'status') {
-    if (!state.ascii) return print('Ningún ASCII cargado actualmente.', 'warn');
-    print('ASCII activo: ' + state.ascii, 'success');
-    print('Total instalados: ' + state.installed.length, 'dim');
-    return;
-  }
-
-  if (action === 'gen') {
-    var type = rest[0];
-    if (!type) return print('Uso: sudo meow gen <txt|png|pdf>', 'error');
-    if (['png','txt','pdf'].indexOf(type) === -1) return print('Formato no válido.', 'error');
-    if (!state.ascii) return print('No hay ASCII cargado.', 'error');
-
-    print('[sudo] Generando archivo ' + type.toUpperCase() + '...', 'dim');
-    renderPreview();
-    
-    setTimeout(function() {
-      if (type === 'txt') exportTxt();
-      if (type === 'png') exportPng();
-      if (type === 'pdf') exportPdf();
-    }, 300);
-    return;
-  }
-
-  if (action === 'save') {
-    var presetName = rest[0];
-    if (!presetName) return print('Uso: sudo meow save <nombre>', 'error');
-    state.presets[presetName] = {
-      ascii: state.ascii,
-      data: JSON.parse(JSON.stringify(state.data)),
-      customThemes: JSON.parse(JSON.stringify(state.customThemes))
-    };
-    saveState();
-    print('✓ Preset "' + presetName + '" guardado.', 'success');
-    return;
-  }
-
-  if (action === 'load') {
-    var presetName = rest[0];
-    if (!presetName) return print('Uso: sudo meow load <nombre>', 'error');
-    if (!state.presets[presetName]) return print('Preset "' + presetName + '" no encontrado.', 'error');
-    
-    var p = state.presets[presetName];
-    state.ascii = p.ascii;
-    Object.assign(state.data, p.data);
-    state.customThemes = p.customThemes;
-    saveState();
-    print('✓ Preset "' + presetName + '" cargado (ASCII: ' + p.ascii + ').', 'success');
-    return;
-  }
-
-  if (action === 'presets') {
-    var keys = Object.keys(state.presets);
-    if (keys.length === 0) return print('No hay presets guardados. Usa: sudo meow save <nombre>', 'warn');
-    print('Presets guardados:', 'dim');
-    keys.forEach(function(k) {
-      print('  • ' + k + ' (ASCII: ' + state.presets[k].ascii + ')');
-    });
-    return;
-  }
-
-  print('sudo meow: acción "' + action + '" no reconocida.', 'error');
-  print('Acciones válidas: add, gen, list, status, save, load, presets', 'dim');
+commands.weather = function() {
+  print('Obteniendo clima...', 'dim');
+  fetch('https://wttr.in/?format=3').then(function(r){return r.text();}).then(function(t){ print('🌤️ ' + t, 'cyan'); }).catch(function(){ print('No se pudo obtener el clima (revisa conexión).', 'warn'); });
 };
+
+commands.top = function() {
+  print('PID   USER      CPU%   MEM%   COMMAND', 'dim');
+  var procs = ['meow-daemon', 'ansi-loader', 'typewriter.service', 'html2canvas.js', 'jspdf.worker', 'safari-web', 'kernel_task'];
+  procs.forEach(function(p, i) {
+    print(String(1000+i).padEnd(5) + ' root     ' + (Math.random()*5).toFixed(1).padStart(4) + '   ' + (Math.random()*10).toFixed(1).padStart(4) + '   ' + p);
+  });
+};
+
+commands.clear = function() { output.innerHTML = ''; previewBox.style.display = 'none'; };
+commands.reset = function() { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem('meow-fwt-history'); location.reload(); };
 
 // ============================================================
 // EXPORTS
 // ============================================================
-function exportTxt() {
-  var text = buildFastfetchPlainText();
-  downloadBlob(new Blob([text], {type:'text/plain'}), 'meow-fwt.txt');
-  print('✓ Archivo meow-fwt.txt guardado.', 'success');
-}
-function exportPng() {
-  if (typeof html2canvas !== 'function') return print('Error: librería PNG no cargada.', 'error');
-  html2canvas(previewBox, { backgroundColor: '#161b22', scale: 2 }).then(function(canvas) {
-    canvas.toBlob(function(blob) {
-      downloadBlob(blob, 'meow-fwt.png');
-      print('✓ Archivo meow-fwt.png guardado.', 'success');
-    });
-  }).catch(function(e) {
-    print('Error al generar PNG: ' + e.message, 'error');
-  });
-}
-function exportPdf() {
-  if (!window.jspdf || !window.jspdf.jsPDF) return print('Error: librería PDF no cargada.', 'error');
-  var doc = new window.jspdf.jsPDF({ unit:'pt', format:'a4' });
-  doc.setFont('courier', 'normal');
-  doc.setFontSize(9);
-  var text = buildFastfetchPlainText();
-  var lines = doc.splitTextToSize(text, 540);
-  doc.text(lines, 30, 40);
-  doc.save('meow-fwt.pdf');
-  print('✓ Archivo meow-fwt.pdf guardado.', 'success');
-}
-function downloadBlob(blob, filename) {
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+function exportTxt() { downloadBlob(new Blob([buildFastfetchPlainText()], {type:'text/plain'}), 'meow-fwt.txt'); print('✓ .txt guardado.', 'success'); }
+function exportPng() { if(!window.html2canvas)return print('Librería no cargada.','error'); html2canvas(previewBox,{backgroundColor:'#161b22',scale:2}).then(function(c){ c.toBlob(function(b){ downloadBlob(b,'meow-fwt.png'); print('✓ .png guardado.','success'); }); }); }
+function exportPdf() { if(!window.jspdf)return print('Librería no cargada.','error'); var doc = new window.jspdf.jsPDF({unit:'pt',format:'a4'}); doc.setFont('courier','normal'); doc.setFontSize(9); doc.text(doc.splitTextToSize(buildFastfetchPlainText(),540),30,40); doc.save('meow-fwt.pdf'); print('✓ .pdf guardado.','success'); }
+function downloadBlob(blob, filename) { var url = URL.createObjectURL(blob); var a = document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(url);}, 1000); }
+
+// ============================================================
+// TYPEWRITER
+// ============================================================
+function typewriterPrint(html, cls, callback) {
+  if (state.liteMode || !html) { printHTML(html); if(callback)callback(); return; }
+  var div = document.createElement('div'); div.className = 'line ' + (cls || ''); output.appendChild(div);
+  var temp = document.createElement('div'); temp.innerHTML = html;
+  var nodes = Array.from(temp.childNodes); var nodeIndex = 0, charIndex = 0;
+  function processNextNode() {
+    if (nodeIndex >= nodes.length) { if(callback)callback(); return; }
+    var node = nodes[nodeIndex];
+    if (node.nodeType === 3) {
+      if (charIndex < node.textContent.length) { div.appendChild(document.createTextNode(node.textContent[charIndex])); charIndex++; window.scrollTo(0,document.body.scrollHeight); setTimeout(processNextNode, 1); }
+      else { nodeIndex++; charIndex = 0; processNextNode(); }
+    } else {
+      var clone = node.cloneNode(false); div.appendChild(clone);
+      var spanText = node.textContent;
+      if (spanText.length > 0) {
+        var spanChar = 0;
+        function processSpan() {
+          if (spanChar < spanText.length) { clone.textContent += spanText[spanChar]; spanChar++; window.scrollTo(0,document.body.scrollHeight); setTimeout(processSpan, 1); }
+          else { nodeIndex++; charIndex = 0; processNextNode(); }
+        }
+        processSpan();
+      } else { nodeIndex++; processNextNode(); }
+    }
+  }
+  processNextNode();
 }
 
 // ============================================================
-// INPUT HANDLING & AUTOCOMPLETADO
+// INPUT HANDLING
 // ============================================================
-
 function autocomplete() {
-  var val = input.value;
-  var parts = val.split(/\s+/);
-  
+  var val = input.value; var parts = val.split(/\s+/);
   if (parts.length === 1) {
-    var cmds = Object.keys(commands);
-    var matches = cmds.filter(function(c) { return c.indexOf(parts[0]) === 0; });
-    if (matches.length === 1) {
-      input.value = matches[0] + ' ';
-    }
+    var matches = Object.keys(commands).filter(function(c){return c.indexOf(parts[0])===0;});
+    if (matches.length === 1) input.value = matches[0] + ' ';
+    else if (matches.length > 1) print(matches.join(', '), 'dim');
     return;
   }
-
   if (parts[0] === 'sudo' && parts[1] === 'meow' && parts.length <= 3) {
-    var actions = ['add', 'gen', 'list', 'status', 'save', 'load', 'presets'];
-    if (parts.length === 3 && parts[2] !== '') {
-      var matches = actions.filter(function(a) { return a.indexOf(parts[2]) === 0; });
-      if (matches.length === 1) input.value = 'sudo meow ' + matches[0] + ' ';
-    } else if (parts.length === 2 || parts[2] === '') {
-      print('Acciones: ' + actions.join(', '), 'dim');
-    }
+    var acts = ['add','gen','list','status','save','load','presets','remove','backup','restore','preset','diff'];
+    if (parts.length === 3 && parts[2] !== '') { var m = acts.filter(function(a){return a.indexOf(parts[2])===0;}); if(m.length===1)input.value='sudo meow '+m[0]+' '; else print(m.join(', '),'dim'); }
+    else print('Acciones: ' + acts.join(', '), 'dim');
     return;
   }
-
-  if (parts[0] === 'sudo' && parts[1] === 'meow' && parts[2] === 'add' && parts.length <= 4) {
-    var keys = Object.keys(ASCII_ARTS);
-    if (parts.length === 4 && parts[3] !== '') {
-      var matches = keys.filter(function(k) { return k.indexOf(parts[3]) === 0; });
-      if (matches.length === 1) input.value = 'sudo meow add ' + matches[0];
-    } else {
-      print('ASCII: ' + keys.join(', '), 'dim');
-    }
-    return;
-  }
-
-  if (parts[0] === 'sudo' && parts[1] === 'meow' && parts[2] === 'gen' && parts.length <= 4) {
-    var formats = ['txt', 'png', 'pdf'];
-    if (parts.length === 4 && parts[3] !== '') {
-      var matches = formats.filter(function(f) { return f.indexOf(parts[3]) === 0; });
-      if (matches.length === 1) input.value = 'sudo meow gen ' + matches[0];
-    } else {
-      print('Formatos: ' + formats.join(', '), 'dim');
-    }
+  if (parts[0] === 'meow' && parts.length <= 2) {
+    var acts = ['add','gen','list','status','save','load','presets','remove','backup','restore'];
+    if (parts.length === 2 && parts[1] !== '') { var m = acts.filter(function(a){return a.indexOf(parts[1])===0;}); if(m.length===1)input.value='meow '+m[0]+' '; else print(m.join(', '),'dim'); }
+    else print('Acciones: ' + acts.join(', '), 'dim');
     return;
   }
 }
 
 input.addEventListener('keydown', function(e) {
-  if (e.key === 'Tab') {
-    e.preventDefault();
-    autocomplete();
-    return;
-  }
-
+  if (e.key === 'Tab') { e.preventDefault(); autocomplete(); return; }
   if (e.key === 'Enter' || e.keyCode === 13) {
-    e.preventDefault();
-    var val = input.value;
-    input.value = '';
-    if (val.trim()) {
-      history.push(val.trim());
-      histIndex = history.length;
-    }
+    e.preventDefault(); var val = input.value; input.value = '';
+    if (val.trim()) { history.push(val.trim()); if(history.length>50)history.shift(); localStorage.setItem('meow-fwt-history', JSON.stringify(history)); histIndex = history.length; }
     handleCommand(val);
   }
-
-  if (e.key === 'ArrowUp') {
-    e.preventDefault();
-    if (histIndex > 0) {
-      histIndex--;
-      input.value = history[histIndex];
-    }
-  }
-  if (e.key === 'ArrowDown') {
-    e.preventDefault();
-    if (histIndex < history.length - 1) {
-      histIndex++;
-      input.value = history[histIndex];
-    } else {
-      histIndex = history.length;
-      input.value = '';
-    }
-  }
+  if (e.key === 'ArrowUp') { e.preventDefault(); if(histIndex>0){histIndex--;input.value=history[histIndex];} }
+  if (e.key === 'ArrowDown') { e.preventDefault(); if(histIndex<history.length-1){histIndex++;input.value=history[histIndex];} else {histIndex=history.length;input.value='';} }
 });
 
-document.getElementById('btnUp').addEventListener('click', function(e) {
-  e.preventDefault();
-  if (histIndex > 0) {
-    histIndex--;
-    input.value = history[histIndex];
-  }
-});
-document.getElementById('btnDown').addEventListener('click', function(e) {
-  e.preventDefault();
-  if (histIndex < history.length - 1) {
-    histIndex++;
-    input.value = history[histIndex];
-  } else {
-    histIndex = history.length;
-    input.value = '';
-  }
-});
+document.getElementById('btnUp').addEventListener('click', function(e) { e.preventDefault(); if(histIndex>0){histIndex--;input.value=history[histIndex];} });
+document.getElementById('btnDown').addEventListener('click', function(e) { e.preventDefault(); if(histIndex<history.length-1){histIndex++;input.value=history[histIndex];} else {histIndex=history.length;input.value='';} });
 
 function handleCommand(raw) {
-  raw = raw.trim();
-  if (!raw) return;
-  print('meow@fwt:~$ ' + raw);
-  var parts = raw.split(/\s+/);
-  var cmd = parts[0];
-  var args = parts.slice(1);
-  
-  if (commands[cmd]) {
-    try { commands[cmd](args); }
-    catch (err) { print('Error: ' + err.message, 'error'); }
-  } else {
-    print('comando no encontrado: ' + cmd + ". Escribe 'help'.", 'error');
-  }
+  raw = raw.trim(); if (!raw) return;
+  print(document.getElementById('promptText').textContent + ' ' + raw);
+  var parts = raw.split(/\s+/); var cmd = parts[0]; var args = parts.slice(1);
+  haptic();
+  if (commands[cmd]) { try { commands[cmd](args); beep(); } catch (err) { print('Error: ' + err.message, 'error'); } }
+  else print('comando no encontrado: ' + cmd + ". Escribe 'help'.", 'error');
 }
 
-document.getElementById('terminal').addEventListener('touchstart', function(e) {
-  if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') {
-    setTimeout(function() { input.focus(); }, 50);
-  }
-}, { passive: true });
+// ============================================================
+// INIT
+// ============================================================
+loadState();
+
+// Cargar config desde URL si existe
+if (window.location.hash.indexOf('#config=') === 0) {
+  try {
+    var b64 = window.location.hash.substring(8);
+    var cfg = JSON.parse(decodeURIComponent(atob(b64)));
+    if (cfg.a) state.ascii = cfg.a;
+    if (cfg.d) Object.assign(state.data, cfg.d);
+    if (cfg.t) state.customThemes = cfg.t;
+    if (cfg.p) state.prompt = cfg.p;
+    saveState();
+    history.replaceState(null, null, ' ');
+    print('✓ Configuración cargada desde URL.', 'success');
+  } catch(e) { print('URL de config inválida.', 'error'); }
+}
+
+output.innerHTML = '';
+print('Meow FWT v2.0 (Edición Definitiva)', 'success');
+print('Copyright (c) 2026 Galeed.', 'dim');
+print('');
+
+var boot = ['[ OK ] Iniciando kernel virtual...', '[ OK ] Cargando módulos de color ANSI...', '[ OK ] Montando sistema de archivos...', '[ OK ] Iniciando servicio meow-terminal...'];
+var bi = 0;
+function runBoot() {
+  if (bi < boot.length) { print(boot[bi], 'success'); bi++; setTimeout(runBoot, 150); }
+  else { print(''); print('Listo. Escribe "help".', 'dim'); if(state.ascii)print('(config restaurada: "'+state.ascii+'")', 'dim'); print(''); setTimeout(function(){input.focus();},300); }
+}
+setTimeout(runBoot, 300);
 
 document.getElementById('terminal').addEventListener('click', function(e) {
   if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') input.focus();
 });
-
-// ============================================================
-// INIT & BOOT SEQUENCE
-// ============================================================
-loadState();
-output.innerHTML = ''; 
-print('Meow FWT v1.0 (Fastfetch Web Terminal)', 'success');
-print('Copyright (c) 2026 Galeed.', 'dim');
-print('');
-
-var bootLines = [
-  '[ OK ] Iniciando kernel virtual...',
-  '[ OK ] Cargando módulos de color ANSI...',
-  '[ OK ] Montando sistema de archivos en memoria...',
-  '[ OK ] Iniciando servicio meow-terminal...'
-];
-
-var i = 0;
-function boot() {
-  if (i < bootLines.length) {
-    print(bootLines[i], 'success');
-    i++;
-    setTimeout(boot, 200);
-  } else {
-    print('');
-    print('Listo. Escribe "help" para ver los comandos.', 'dim');
-    if (state.ascii) print('(config restaurada: ASCII "' + state.ascii + '")', 'dim');
-    print('');
-    setTimeout(function() { input.focus(); }, 300);
-  }
-}
-setTimeout(boot, 300);
 
 })();
 </script>
